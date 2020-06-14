@@ -82,16 +82,6 @@ class Brickadia {
             for(const callback of this._callbacks['out'])
                 callback(line);
         });
-
-        const sp = this._spawn;
-        process.on('SIGINT', () => {
-            sp.kill();
-            process.exit();
-        });
-
-        process.on('uncaughtException', _err => {
-            sp.kill();
-        });
     }
 
     /*

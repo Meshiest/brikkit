@@ -11,9 +11,22 @@ servers:
     map: Plate
     port: 7777
     players: 20
+    plugins:
+      - syncchat
+      # - swapbuild
+    config:
+      syncchat:
+        id: A
   - name: "[B] server B"
+    disabled: false
     description: Both of these are hosted at the same time
     path: serverB
     map: Plate
     port: 7778
     players: 20
+    plugins:
+      - syncchat
+      # - swapbuild
+    config:
+      syncchat:
+        id: B

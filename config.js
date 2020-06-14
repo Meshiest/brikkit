@@ -25,4 +25,7 @@ if (config.servers.some(s =>
   process.exit();
 }
 
+// filter out disabled servers
+config.servers = config.servers.filter(s => !s.disabled);
+
 module.exports = config;

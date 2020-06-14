@@ -47,7 +47,10 @@ class PluginSystem {
                 pluginNameMap[plugin.name] = plugin;
         });
 
-        Object.values(pluginNameMap).forEach(pluginPath => this.loadPlugin(pluginPath.base));
+        Object.values(pluginNameMap)
+            // check if this server has this plugin configured or include all of them
+            .filter(plugin => !this.brikkit.server.plugins || this.brikkit.server.plugins.includes(plugin.name))
+            .forEach(pluginPath => this.loadPlugin(pluginPath.base));
     }
 
     _loadPluginZip(plugin) {

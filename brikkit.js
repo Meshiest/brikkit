@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const stripAnsi = require('strip-ansi');
 
 const Brickadia = require('./brickadia.js');
@@ -12,9 +13,10 @@ const Scraper = require('./scraper.js');
 const Event = require('./events/event.js');
 
 class Brikkit {
-    constructor(config, server, logStream) {
+    constructor(config, server, log) {
         this.config = config;
         this.server = server;
+        this.log = log;
         global.Brikkit.push(this);
 
         this._brickadia = new Brickadia(config, server);
@@ -22,13 +24,13 @@ class Brikkit {
             this._developmentMode();
         else {
             this._brickadia.on('out',
-                line => logStream.write(`bout: "${line}"\n`));
+                line => log(`bout: "${line}"`));
             this._brickadia.on('err',
-                line => logStream.write(`berr: "${line}"\n`));
+                line => log(`berr: "${line}"`));
         }
 
         // make an object entry for each type of event
-        this._callbacks = {};
+        this._callbacks = {exit: []};
         for(const eventKey of Object.keys(Event)) {
             const eventConstructor = Event[eventKey];
             const getType = eventConstructor.prototype.getType;
@@ -42,7 +44,7 @@ class Brikkit {
 
         this._brickadia.on('out', line => this._handleBrickadiaLine(line));
         this._brickadia.on('close', () => {
-            throw new Error('Brickadia closed (probable crash)');
+            this.log('Brickadia closed (probable crash)');
         });
 
         this._terminal = new Terminal();
@@ -53,18 +55,19 @@ class Brikkit {
                this._brickadia.write(`${args.join(' ')}\n`);
         });
 
-        console.log(' --- STARTING BRIKKIT SERVER --- ');
+        this.log(' --- STARTING BRIKKIT SERVER --- ');
 
         this.on('prestart', evt => {
             this._brickadia.write(`travel ${config.map}\n`);
         });
 
         this.on('start', evt => {
-            console.log(' --- SERVER START --- ');
+            this.log(' --- SERVER START --- ');
         });
 
         this._joinParser = new Parser.JoinParser();
         this._chatParser = new Parser.ChatParser();
+        this._exitParser = new Parser.ExitParser();
         this._preStartParser = new Parser.PreStartParser();
         this._startParser = new Parser.StartParser();
         this._mapChangeParser = new Parser.MapChangeParser();
@@ -117,6 +120,12 @@ class Brikkit {
         });
     }
 
+    // get path to a save file
+    savePath(s) {
+        const file = path.join(this._brickadia.SAVES_PATH, s + '.brs');
+        return fs.existsSync(file) ? file : null;
+    }
+
     // DANGER: clears all bricks in the server
     clearAllBricks() {
         this._brickadia.write(`Bricks.ClearAll\n`);
@@ -144,8 +153,8 @@ class Brikkit {
 
     // adds callbacks to print out stdout and stderr directly from Brickadia
     _developmentMode() {
-        this._brickadia.on('out', line => console.log(`bout: "${line}"`));
-        this._brickadia.on('err', line => console.log(`berr: "${line}"`));
+        this._brickadia.on('out', line => this.log(`bout: "${line}"`));
+        this._brickadia.on('err', line => this.log(`berr: "${line}"`));
     }
 
     _handleBrickadiaLine(line) {
@@ -185,6 +194,11 @@ class Brikkit {
             const player = this.getPlayerFromUsername(username);
 
             this._putEvent(new Event.ChatEvent(date, player, message));
+        }
+
+        const exitParserResult = this._exitParser.parse(generator, restOfLine);
+        if(exitParserResult) {
+            this._putEvent({getType(){return 'exit'}, getDate(){return date;}});
         }
 
         const serverPreStarted =
