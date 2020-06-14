@@ -4,15 +4,7 @@ const fs = require('fs');
 const readline = require('readline');
 const { spawn, execSync } = require('child_process');
 
-const PROGRAM_PATH =
-    'brickadia/Brickadia/Binaries/Linux/BrickadiaServer-Linux-Shipping';
-
-const CONFIG_PATH = 'brickadia/Brickadia/Saved/Config/LinuxServer';
-const SAVES_PATH = 'brickadia/Brickadia/Saved/Builds';
-const GAME_SERVER_SETTINGS = CONFIG_PATH + '/ServerSettings.ini';
-
 const BRICKADIA_FILENAME = 'Brickadia_Alpha4_Patch1_CL3642_Linux.tar.xz';
-
 const BRICKADIA_URL = 'https://static.brickadia.com/builds/CL3642/' +
         BRICKADIA_FILENAME;
 
@@ -21,36 +13,46 @@ const DEFAULT_SERVER_DESC = 'Get Brikkit at https://github.com/n42k/brikkit';
 const DEFAULT_SERVER_MAX_PLAYERS = 20;
 
 class Brickadia {
-    constructor(configuration) {
+    constructor(config, server) {
+        this.config = config;
+        this.server = server;
+
+        const path = server.path;
+        const brickadia = `brickadia/${path}/Brickadia`;
+        this.PROGRAM_PATH = `${brickadia}/Binaries/Linux/BrickadiaServer-Linux-Shipping`;
+        this.CONFIG_PATH = `${brickadia}/Saved/Config/LinuxServer`;
+        this.SAVES_PATH = `${brickadia}/Saved/Builds`;
+        this.SETTINGS_PATH = this.CONFIG_PATH + '/ServerSettings.ini';
+
         if(this._getBrickadiaIfNeeded())
-            this._writeDefaultConfiguration();
-        
-        if(process.env.EMAIL === undefined ||
-            process.env.PASSWORD === undefined ||
-            process.env.PORT === undefined) {
+            this._writeDefaultConfiguration(config, server);
+
+        if(config.credentials.email === undefined ||
+            config.credentials.password === undefined ||
+            server.port === undefined) {
             throw new Error('Email or password are not set!');
         }
-        
+
         // get user email and password, and server port based on env vars
-        const userArg = `-User="${process.env.EMAIL}"`;
-        const passwordArg = `-Password="${process.env.PASSWORD}"`;
-        const portArg = `-port="${process.env.PORT}"`;
+        const userArg = `-User="${config.credentials.email}"`;
+        const passwordArg = `-Password="${config.credentials.password}"`;
+        const portArg = `-port="${server.port}"`;
 
         // start brickadia with aforementioned arguments
         // note that the unbuffer program is required,
         // otherwise the io will eventually stop
         this._spawn = spawn('unbuffer',
-            ['-p', PROGRAM_PATH, 'BrickadiaServer',
+            ['-p', this.PROGRAM_PATH, 'BrickadiaServer',
                 '-NotInstalled', '-log', userArg, passwordArg, portArg]);
         this._spawn.stdin.setEncoding('utf8');
-        
+
         this._callbacks = {
             close: [],
             exit: [],
             out: [],
             err: []
         };
-        
+
         this._spawn.on('close', code => {
             for(const callback of this._callbacks['close'])
                 callback(code);
@@ -80,19 +82,19 @@ class Brickadia {
             for(const callback of this._callbacks['out'])
                 callback(line);
         });
-        
+
         const sp = this._spawn;
         process.on('SIGINT', () => {
             sp.kill();
             process.exit();
         });
-        
+
         process.on('uncaughtException', _err => {
             sp.kill();
         });
     }
-    
-    /* 
+
+    /*
      * Types available:
      * 'close': on normal brickadia close
      *      args: code
@@ -106,50 +108,59 @@ class Brickadia {
     on(type, callback) {
         if(this._callbacks[type] === undefined)
             throw new Error('Undefined Brickadia.on type.');
-        
+
         this._callbacks[type].push(callback);
     }
-    
+
     write(line) {
         this._spawn.stdin.write(line);
     }
-    
-    _writeDefaultConfiguration(configuration) {
-        execSync(`mkdir -p ${CONFIG_PATH}`);
-        
-        fs.writeFileSync(GAME_SERVER_SETTINGS,
+
+    _writeDefaultConfiguration(config, server) {
+        execSync(`mkdir -p ${this.CONFIG_PATH}`);
+
+        fs.writeFileSync(this.SETTINGS_PATH,
 `[Server__BP_ServerSettings_General_C BP_ServerSettings_General_C]
 MaxSelectedBricks=1000
 MaxPlacedBricks=1000
 SelectionTimeout=2.000000
 PlaceTimeout=2.000000
-ServerName=${DEFAULT_SERVER_NAME}
-ServerDescription=${DEFAULT_SERVER_DESC}
-ServerPassword=
-MaxPlayers=${DEFAULT_SERVER_MAX_PLAYERS}
+ServerName=${server.name || DEFAULT_SERVER_NAME}
+ServerDescription=${server.description || DEFAULT_SERVER_DESC}
+ServerPassword=${server.password || ''}
+MaxPlayers=${server.players || DEFAULT_SERVER_MAX_PLAYERS}
 bPubliclyListed=True
-WelcomeMessage="<color=\\"0055ff\\">Welcome to <b>{2}</>, {1}.</>"
+WelcomeMessage="${server.welcome || '<color=\\"0055ff\\">Welcome to <b>{2}</>, {1}.</>'}"
 bGlobalRulesetSelfDamage=True
 bGlobalRulesetPhysicsDamage=False`);
     }
-    
+
     // returns whether downloading brickadia was needed
     _getBrickadiaIfNeeded() {
-        if(fs.existsSync('brickadia') &&
-            fs.existsSync(PROGRAM_PATH) &&
-            !fs.existsSync(BRICKADIA_FILENAME))
+        const path = this.server.path;
+        if(fs.existsSync(`brickadia/${path}`) &&
+            fs.existsSync(this.PROGRAM_PATH))
             return false;
-        
-        execSync(`rm -f ${BRICKADIA_FILENAME}`);
-        execSync(`wget ${BRICKADIA_URL}`, {
-            stdio: [null, process.stdout, process.stderr]});
-        execSync(`rm -rf brickadia/*`);
-        execSync(`mkdir -p brickadia`);
-        execSync(`pv ${BRICKADIA_FILENAME} | tar xJp -C brickadia`, {
-            stdio: [null, process.stdout, process.stderr]});
-        execSync(`rm ${BRICKADIA_FILENAME}`);
-        execSync(`mkdir -p ${SAVES_PATH}`);
-        
+
+        // only download brickadia if it doesn't exist
+        if(!fs.existsSync(BRICKADIA_FILENAME)) {
+            execSync(`rm -f ${BRICKADIA_FILENAME}`);
+            execSync(`wget ${BRICKADIA_URL}`, {
+                stdio: [null, process.stdout, process.stderr]});
+            execSync(`rm -rf brickadia/${path}/*`);
+        }
+
+        // create folder if it does not exist
+        if (!fs.existsSync('brickadia'))
+            execSync(`mkdir -p brickadia`);
+
+        // create the server folder
+        if (!fs.existsSync(`brickadia/${path}`)) {
+            execSync(`mkdir -p brickadia/${path}`);
+            execSync(`pv ${BRICKADIA_FILENAME} | tar xJp -C brickadia/${this.server.path}`, {
+                stdio: [null, process.stdout, process.stderr]});
+            execSync(`mkdir -p ${this.SAVES_PATH}`);
+        }
         return true;
     }
 }

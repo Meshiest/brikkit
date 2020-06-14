@@ -1,0 +1,19 @@
+logging:
+  log: false
+  dev: true
+credentials:
+  email: your@email
+  password: y0urP4s5w0rd
+servers:
+  - name: "[A] server A"
+    description: Both of these are hosted at the same time
+    path: serverA
+    map: Plate
+    port: 7777
+    players: 20
+  - name: "[B] server B"
+    description: Both of these are hosted at the same time
+    path: serverB
+    map: Plate
+    port: 7778
+    players: 20
