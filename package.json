@@ -6,7 +6,9 @@
     "author": "n42k",
     "contributors": [],
     "dependencies": {
+        "brs-js": "^1.1.15",
         "cheerio": "^1.0.0-rc.3",
+        "disrequire": "^1.1.0",
         "dotenv": "^8.0.0",
         "js-yaml": "^3.14.0",
         "moment": "^2.24.0",

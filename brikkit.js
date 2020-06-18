@@ -4,6 +4,7 @@ const stripAnsi = require('strip-ansi');
 
 const Brickadia = require('./brickadia.js');
 const Terminal = require('./terminal.js');
+const brs = require('brs-js');
 
 const Parser = require('./parsers/parser.js');
 
@@ -17,9 +18,10 @@ class Brikkit {
         this.config = config;
         this.server = server;
         this.log = log;
+        this.brs = brs;
         global.Brikkit.push(this);
 
-        this._brickadia = new Brickadia(config, server);
+        this._brickadia = new Brickadia(config, server, log);
         if(config.logging.dev)
             this._developmentMode();
         else {
@@ -53,6 +55,30 @@ class Brikkit {
 
            if(cmd === 'cmd')
                this._brickadia.write(`${args.join(' ')}\n`);
+
+           if(cmd === 'reload') {
+                try {
+                    // reload config
+                    this.config = this.config.reload();
+                    // update server config based on shared port
+                    this.server = this.config.servers.find(s => s.port === this.server.port);
+
+                    // server is now disabled
+                    if (!this.server) {
+                        this._brickadia.write('exit\n');
+                        return;
+                    }
+
+                    this.log('Reloading plugins...')
+                    this.debugSay('Reloading plugins...');
+                    const loadedPlugins = this._pluginSystem.loadAllPlugins();
+                    this.log(`Loaded ${loadedPlugins.length} plugins`);
+                    this.debugSay(`Loaded <color=\\"ffff00\\">${loadedPlugins.length}</> plugins.`);
+                } catch (e) {
+                    this.log('Error reloading plugins', e)
+                    this.debugSay('Error reloading plugins');
+                }
+           }
         });
 
         this.log(' --- STARTING BRIKKIT SERVER --- ');
@@ -87,6 +113,9 @@ class Brikkit {
             throw new Error('Undefined Brikkit.on type.');
 
         this._callbacks[type].push(callback);
+        return () => {
+            this._callbacks[type].splice(this._callbacks[type].indexOf(callback, 1));
+        }
     }
 
     getPlayerFromUsername(username) {
@@ -99,6 +128,10 @@ class Brikkit {
 
         for(const msg of messages)
             this._brickadia.write(`Chat.Broadcast ${msg}\n`);
+    }
+
+    debugSay(...args) {
+        const msg = `"[<color=\\"c4d7f5\\">BRIKKIT</>]: ${args.join(' ')}"`;
     }
 
     saveBricks(saveName) {
@@ -118,6 +151,29 @@ class Brikkit {
 
             callback(filesWithoutExtension);
         });
+    }
+
+    // open a save file if it exists, returns null on error
+    readSaveData(s) {
+        const file = this.savePath(s);
+        if (!file)
+            return null;
+        try {
+            return brs.read(fs.readFileSync(s));
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // write saveData to a file, returns false on error
+    writeSaveData(name, data) {
+        const file = path.join(this._brickadia.SAVES_PATH, name + '.brs');
+        try {
+            fs.writeFileSync(file, new Uint8Array(brs.write(data)));
+            return true;
+        } catch (e) {
+            return false;
+        }
     }
 
     // get path to a save file
@@ -216,8 +272,13 @@ class Brikkit {
     }
 
     _putEvent(event) {
-        for(const callback of this._callbacks[event.getType()])
-            callback(event);
+        for(const callback of this._callbacks[event.getType()]) {
+            try {
+                callback(event);
+            } catch (err) {
+                this.log('Error in callback', err);
+            }
+        }
     }
 
     _addPlayer(player) {

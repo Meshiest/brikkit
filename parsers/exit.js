@@ -7,7 +7,6 @@ This line is related to player messages:
 
 class ExitParser extends BaseParser {
     parse(generator, line) {
-        console.log('exit', generator, line)
         return generator === 'LogExit' && line === 'Exiting.';
     }
 }

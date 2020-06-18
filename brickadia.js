@@ -13,10 +13,12 @@ const DEFAULT_SERVER_DESC = 'Get Brikkit at https://github.com/n42k/brikkit';
 const DEFAULT_SERVER_MAX_PLAYERS = 20;
 
 class Brickadia {
-    constructor(config, server) {
+    constructor(config, server, log) {
         this.config = config;
         this.server = server;
+        this.log = log;
 
+        // configuration paths
         const path = server.path;
         const brickadia = `brickadia/${path}/Brickadia`;
         this.PROGRAM_PATH = `${brickadia}/Binaries/Linux/BrickadiaServer-Linux-Shipping`;
@@ -24,8 +26,11 @@ class Brickadia {
         this.SAVES_PATH = `${brickadia}/Saved/Builds`;
         this.SETTINGS_PATH = this.CONFIG_PATH + '/ServerSettings.ini';
 
-        if(this._getBrickadiaIfNeeded())
-            this._writeDefaultConfiguration(config, server);
+        // download and unpack brickadia
+        this._getBrickadiaIfNeeded();
+
+        // update the config every time the server starts
+        this._writeDefaultConfiguration(config, server);
 
         if(config.credentials.email === undefined ||
             config.credentials.password === undefined ||
@@ -54,13 +59,22 @@ class Brickadia {
         };
 
         this._spawn.on('close', code => {
-            for(const callback of this._callbacks['close'])
-                callback(code);
+            for(const callback of this._callbacks['close']) {
+                try {
+                    callback(code);
+                } catch (e) {
+                    this.log('brickadia close callback error', e)
+                }
+            }
         });
 
         this._spawn.on('exit', code => {
             for(const callback of this._callbacks['exit'])
-                callback(code);
+                try {
+                    callback(code);
+                } catch (e) {
+                    this.log('brickadia exit callback error', e)
+                }
         });
 
         const errRl = readline.createInterface({
@@ -70,7 +84,11 @@ class Brickadia {
 
         errRl.on('line', line => {
             for(const callback of this._callbacks['err'])
-                callback(line);
+                try {
+                    callback(line);
+                } catch (e) {
+                    this.log('brickadia err callback error', e)
+                }
         });
 
         const outRl = readline.createInterface({
@@ -79,8 +97,13 @@ class Brickadia {
         });
 
         outRl.on('line', line => {
-            for(const callback of this._callbacks['out'])
-                callback(line);
+            for(const callback of this._callbacks['out']) {
+                try {
+                    callback(line);
+                } catch (e) {
+                    this.log('brickadia out callback error', e)
+                }
+            }
         });
     }
 
@@ -100,6 +123,9 @@ class Brickadia {
             throw new Error('Undefined Brickadia.on type.');
 
         this._callbacks[type].push(callback);
+        return () => {
+            this._callbacks[type].splice(this._callbacks[type].indexOf(callback, 1))
+        };
     }
 
     write(line) {

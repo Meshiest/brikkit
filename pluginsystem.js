@@ -1,6 +1,7 @@
 const fs = require('fs');
 const { execSync } = require('child_process');
 const path = require('path');
+const disrequire = require('disrequire');
 
 const tmp = require('tmp');
 tmp.setGracefulCleanup();
@@ -16,13 +17,22 @@ class PluginSystem {
     }
 
     loadPlugin(plugin) {
-        if(plugin.endsWith('zip'))
-            this._loadPluginZip(plugin);
-        else
-            this._loadPluginDirectory(plugin);
+        return plugin.endsWith('zip') ? this._loadPluginZip(plugin) : this._loadPluginDirectory(plugin);
     }
 
     loadAllPlugins() {
+        if (this.loadedPlugins && this.loadedPlugins.length > 0) {
+            for(const plugin of this.loadedPlugins) {
+                if (plugin.cleanup) {
+                    try {
+                        plugin.cleanup();
+                    } catch (e) {
+                        this.brikkit.log('plugin loader (cleanup):', e);
+                    }
+                }
+            }
+        }
+
         const pluginPaths = this.getAvailablePlugins()
             .map(plugin => path.parse(plugin));
 
@@ -47,20 +57,38 @@ class PluginSystem {
                 pluginNameMap[plugin.name] = plugin;
         });
 
-        Object.values(pluginNameMap)
+        // store loaded plugins
+        this.loadedPlugins = Object.values(pluginNameMap)
             // check if this server has this plugin configured or include all of them
             .filter(plugin => !this.brikkit.server.plugins || this.brikkit.server.plugins.includes(plugin.name))
-            .forEach(pluginPath => this.loadPlugin(pluginPath.base));
+            // load the plugin
+            .map(pluginPath => this.loadPlugin(pluginPath.base))
+            // filter all errored plugins
+            .filter(p => p);
+
+        return this.loadedPlugins;
     }
 
     _loadPluginZip(plugin) {
         const path = tmp.dirSync().name;
         execSync(`unzip ./plugins/${plugin} -d ${path}`);
-        require(`${path}/index.js`)(this.brikkit);
+        try { disrequire(`${path}/index.js`); } catch (e) { }
+
+        try {
+            return require(`${path}/index.js`)(this.brikkit);
+        } catch (e) {
+            this.brikkit.log(`plugin loader (loading ${plugin}):`, e);
+        }
     }
 
     _loadPluginDirectory(plugin) {
-        require(`${process.cwd()}/plugins/${plugin}/index.js`)(this.brikkit);
+        try { disrequire(`${process.cwd()}/plugins/${plugin}/index.js`); } catch (e) { }
+
+        try {
+            return require(`${process.cwd()}/plugins/${plugin}/index.js`)(this.brikkit);
+        } catch (e) {
+            this.brikkit.log(`plugin loader (loading ${plugin}):`, e);
+        }
     }
 }
 
