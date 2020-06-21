@@ -1,5 +1,4 @@
 const fs = require('fs');
-const psTree = require('ps-tree');
 const { execSync, spawn } = require('child_process');
 
 const BrikkitServer = require('./brikkit.js');
@@ -11,8 +10,7 @@ const mkdir = d => fs.existsSync(d) || execSync(`mkdir ${d}`);
 
 const iso8601DateString = (new Date()).toISOString();
 
-const kill = pid => psTree(pid, (err, children) =>
-    spawn('kill', ['-9'].concat(children.map(p => p.PID))));
+const kill = pid => spawn('kill', ['-9', pid]);
 
 // remove colons from the date string; required for windows
 const colonlessDateString = iso8601DateString.split(':').join('');
@@ -31,7 +29,10 @@ function createServer(server, i) {
             const brikkit = new BrikkitServer(config, server, log);
             brikkit.getPluginSystem().loadAllPlugins();
             brikkit._logFile = logFile;
-            brikkit.on('exit', () => kill(brikkit._brickadia._spawn.pid));
+            brikkit.on('exit', () => {
+                console.log(`[${i}]`, 'closing brikkit');
+                kill(brikkit._brickadia._spawn.pid);
+            });
             resolve(brikkit);
         });
 
@@ -47,6 +48,7 @@ Promise.all(config.servers.map(createServer))
 
         // kill all processes in the tree
         const cleanup = (clean, exit) => (code) => {
+            servers.forEach(s => kill(s._brickadia._spawn.pid));
             if (exit) {
                 console.log('Exiting');
                 process.exit();

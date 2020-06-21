@@ -1,6 +1,10 @@
 const brs = require('brs-js');
 const fs = require('fs');
 const { sanitize } = require('../../util.js');
+// try{require('disrequire')('./util.tool.js');}catch(e){console.log(e)}
+const { moveBricks, studs } = require('./util.tool.js');
+const PlayerPosProvider = require('./util.playerPos.js');
+const SaveParseProvider = require('./util.saveParse.js');
 
 const cage = brs.read(fs.readFileSync(__dirname  + '/cage.brs'));
 const author = {
@@ -32,98 +36,17 @@ const createCage = (author, {x, y, z}) => ({
   brick_assets: cage.brick_assets,
   materials: cage.materials,
   colors: cage.colors,
-  bricks: cage.bricks.map(b => ({
-    ...b,
-    position: [b.position[0] + x, b.position[1] + y, b.position[2] + z],
-  })),
-})
-
+  bricks: moveBricks(cage.bricks, [x, y, z]),
+});
 
 module.exports = brikkit => {
   const write = str => brikkit._brickadia.write(str + '\n');
   const deregister = [];
 
-  function getPlayerPos(playerName) {
-    return new Promise((resolve, reject) => {
-      const playerState = {};
-      let status = 0;
-      let cb;
-      const id = setTimeout(() => {
-        clean();
-        reject(status);
-      }, 1000);
-      const timeout = () => clearTimeout(id)
+  global.authorized = global.authorized || [];
 
-      const clean = () => {
-        timeout();
-        deregister.splice(deregister.indexOf(timeout), 1);
-        deregister.splice(deregister.indexOf(cb), 1);
-      };
-
-      deregister.push(timeout);
-      deregister.push(cb = brikkit._brickadia.on('out', line => {
-        // a few line parsers for the various console commands
-        const regexes = [{
-          name: 'state',
-          regex: /BP_PlayerState_C .+?PersistentLevel\.(?<state>BP_PlayerState_C_\d+)\.PlayerName = (?<name>.*)$/,
-        }, {
-          name: 'controller',
-          regex: /BP_PlayerState_C .+?PersistentLevel\.(?<state>BP_PlayerState_C_\d+)\.Owner = BP_PlayerController_C'.+?:PersistentLevel.(?<controller>BP_PlayerController_C_\d+)'/
-        }, {
-          name: 'pawn',
-          regex: /BP_PlayerController_C .+?PersistentLevel\.(?<controller>BP_PlayerController_C_\d+)\.Pawn = BP_FigureV2_C'.+?:PersistentLevel.(?<pawn>BP_FigureV2_C_\d+)'/
-        }, {
-          name: 'pos',
-          regex: /CapsuleComponent .+?PersistentLevel\.(?<pawn>BP_FigureV2_C_\d+)\.CollisionCylinder\.RelativeLocation = \(X=(?<x>[\d\.-]+),Y=(?<y>[\d\.-]+),Z=(?<z>[\d\.-]+)\)/
-        }]
-          // join them into an object
-          .reduce((acc, {name, regex}) => {
-            acc[name] = line.match(regex);
-            return acc;
-          }, {});
-
-        // check if this is playerstate data and run the next command
-        if (regexes.state) {
-          const { state, name } = regexes.state.groups;
-          if (name === playerName && status === 0) {
-            status = 1;
-            playerState.name = name;
-            playerState.state = state;
-            write(`GetAll BRPlayerState Owner Name=${state}`);
-          }
-
-        // check if this is player controller data and run the next command
-        } else if (regexes.controller) {
-          const { state, controller } = regexes.controller.groups;
-          if (playerState.state === state && status === 1) {
-            status = 2;
-            playerState.controller = controller;
-            write(`GetAll BP_PlayerController_C Pawn Name=${controller}`);
-          }
-
-        // check if this is player pawn data and run the next command
-        } else if (regexes.pawn) {
-          const { pawn, controller } = regexes.pawn.groups;
-          if (playerState.controller === controller && status === 2) {
-            status = 3;
-            playerState.pawn = pawn
-            write(`GetAll SceneComponent RelativeLocation Name=CollisionCylinder Outer=${pawn}`);
-          }
-
-        // check if this is player position data and resolve
-        } else if (regexes.pos) {
-          let { x, y, z, pawn } = regexes.pos.groups;
-          if (playerState.pawn === pawn && status === 3) {
-            status = 4;
-            x = Number(x), y = Number(y), z = Number(z);
-            clean();
-            resolve({x, y, z});
-          }
-        }
-      }));
-      write('GetAll BRPlayerState PlayerName');
-    });
-  }
+  const getPlayerPos = PlayerPosProvider(brikkit, deregister);
+  const saveAndParse = SaveParseProvider(brikkit);
 
   const lastCommand = {};
 
@@ -131,13 +54,36 @@ module.exports = brikkit => {
     const name = evt.getSender().getUsername();
     const [command, ...args] = evt.getContent().split(' ');
     const now = Date.now();
-    if (command === '!origin' && (!lastCommand[name] || (lastCommand[name] + 30000 < now))) {
-      lastCommand[name] = now;
+
+    const auth = (name === 'cake' || global.authorized.includes(name));
+
+    const cooldown = () => {
+      if (name === 'cake')
+        return true;
+
+      const isOk = !lastCommand[name] || (lastCommand[name] + 1000 < now);
+      if (isOk) {
+        lastCommand[name] = now;
+      }
+      return isOk;
+    };
+
+    if (command === '!origin' && cooldown() && auth) {
       brikkit.writeSaveData('brick', createBrick(0, 0, 0));
       brikkit.loadBricks('brick');
     }
-    if (command === '!find' && (!lastCommand[name] || (lastCommand[name] + 30000 < now))) {
-      lastCommand[name] = now;
+
+    if (command === '!parse' && name === 'cake' && cooldown()) {
+        Promise.all([saveAndParse('parsed'), getPlayerPos(name)])
+        .catch(() => brikkit.say(`"Could load data or get pos"`))
+        .then(([save, {x, y, z}]) => {
+          if (save) {
+            brikkit.say(`"Found ${save.bricks.length} bricks, player @ &lt;${x}, ${y}, ${z}&gt;`);
+          }
+        });
+    }
+
+    if (command === '!find' && cooldown() && auth) {
       getPlayerPos(name)
         .then(({x, y, z}) => {
           brikkit.say(`"Found ${name} @ &lt;${x}, ${y}, ${z}&gt;"`);
@@ -145,8 +91,7 @@ module.exports = brikkit => {
         .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`));
 
     }
-    if (command === '!brick' && (!lastCommand[name] || (lastCommand[name] + 30000 < now))) {
-      lastCommand[name] = now;
+    if (command === '!brick' && cooldown() && auth) {
       getPlayerPos(name)
         .then(({x, y, z}) => {
           brikkit.writeSaveData('brick_' + name, createBrick(x, y, z - 30));
@@ -155,21 +100,19 @@ module.exports = brikkit => {
         .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`));
     }
 
-    if (command === '!cage' && (!lastCommand[name] || (lastCommand[name] + 30000 < now))) {
-      lastCommand[name] = now;
+    if (command === '!cage' && cooldown() && auth) {
       getPlayerPos(name)
         .then(({x, y, z}) => {
           x = Math.round(x);
           y = Math.round(y);
           z = Math.round(z);
-          brikkit.writeSaveData('cage_' + name, createCage(x, y, z - 38));
+          brikkit.writeSaveData('cage_' + name, createCage(author, {x, y, z: z - 38}));
           brikkit.loadBricks('cage_' + name);
         })
         .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`));
     }
 
-    if (command === '!trap' && (!lastCommand[name] || (lastCommand[name] + 30000 < now)) && args[0]) {
-      lastCommand[name] = now;
+    if (command === '!trap' && cooldown() && args[0] && auth) {
       getPlayerPos(args[0])
         .then(({x, y, z}) => {
           x = Math.round(x);
@@ -187,6 +130,16 @@ module.exports = brikkit => {
         })
         .catch(() => brikkit.say(`"Could not find ${sanitize(args[0])}"`));
     }
+
+    if (command === '!authorize' && name === 'cake' && args[0]) {
+      console.log(global.authorized);
+      if (!brikkit.getPlayerFromUsername(args[0]))
+        return;
+      if (global.authorized.includes(args[0]))
+        global.authorized.splice(global.authorized.indexOf(args[0]), 1);
+      else
+        global.authorized.push(args[0]);
+    }
   }));
 
   return {
@@ -198,9 +151,11 @@ module.exports = brikkit => {
 
 /*
 
+some notes
+
 brikkit._brickadia.write(`\n`);
 
-cmd GetAll BRPlayerState PlayerName
+cmd GetAll BRPlayerState PlayerName PlayerName=cake
 cmd GetAll BRPlayerState Owner Name=BP_PlayerState_C_0
 cmd GetAll BP_PlayerController_C Pawn Name=BP_PlayerController_C_0
 cmd GetAll SceneComponent RelativeLocation Name=CollisionCylinder Outer=BP_FigureV2_C_0
@@ -210,5 +165,22 @@ te_C_0.Owner = BP_PlayerController_C'/Game/Maps/Plate/Plate.Plate:PersistentLeve
 CapsuleComponent /Game/Maps/Plate/Plate.Plate:PersistentLevel.BP_FigureV2_C_0.CollisionCylinder.RelativeLocation = (X=-200.000000,Y=120.000000,Z=25.000000)
 
 PersistentLevel.BP_FigureV2_C_0.CollisionCylinder.RelativeLocation = (X=-200.000000,Y=120.000000,Z=25.000000)
+
+cmd GetAll BP_FigureV2_C PointAtLocation Name=BP_FigureV2_C_0
+
+cmd GetAll BRPlayerState Owner Name=BP_PlayerState_C_0
+
+GetAll BP_FigureV2_C PointAtLocation
+GetAll BP_FigureV2_C Role
+
+ListProps BP_PlayerController_C *
+
+// get player permissions
+GetAll BRPlayerState PermissionsRoles
+
+// disconnect message
+// make note of "Owner: BP_PlayerController_C_13"
+LogNet: UChannel::Close: Sending CloseBunch. ChIndex == 0. Name: [UChannel] ChIndex: 0, Closing: 0 [UNetConnection] RemoteAddr: <snip> , Name: IpConnection_13, Driver: GameNetDriver IpNetDriver_1, IsServer: YES, PC: BP_PlayerController_C_13, Owner: BP_PlayerController_C_13, UniqueId: INVALI
+
 
 */

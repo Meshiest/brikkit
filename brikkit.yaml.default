@@ -15,9 +15,13 @@ servers:
       - syncchat
       # - pos
       # - swapbuild
+      # - minesweeper
     config:
       syncchat:
         id: A
+      minesweeper:
+        authorized:
+          - cake
   - name: "[B] server B"
     disabled: false
     description: Both of these are hosted at the same time

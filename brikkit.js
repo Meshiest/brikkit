@@ -159,7 +159,7 @@ class Brikkit {
         if (!file)
             return null;
         try {
-            return brs.read(fs.readFileSync(s));
+            return brs.read(fs.readFileSync(file));
         } catch (e) {
             return null;
         }
