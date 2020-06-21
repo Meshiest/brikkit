@@ -40,6 +40,9 @@ module.exports = brikkit => {
     if (command === '!text' && cooldown(name)) {
        getPlayerPos(name)
         .then(({x, y, z}) => {
+          x = Math.floor(x)
+          y = Math.floor(y)
+          z = Math.floor(z)
           // generate text and write to save
           brikkit.writeSaveData('text_' + name, font.text(args.join(' '), {
             shift: [x, y, z - 27],

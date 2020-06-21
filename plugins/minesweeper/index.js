@@ -374,5 +374,5 @@ module.exports = brikkit => {
       deregister.forEach(d => d());
     },
     documentation,
-  }
+  };
 };
