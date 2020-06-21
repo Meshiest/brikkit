@@ -66,4 +66,11 @@ module.exports = brikkit => {
     }
 
   }));
+
+  return {
+    cleanup() {
+      deregister.forEach(d => d());
+    },
+    documentation,
+  };
 };
