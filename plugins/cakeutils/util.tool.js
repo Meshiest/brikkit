@@ -1,3 +1,7 @@
+/*
+  cake's save parsing and writing tool
+*/
+
 const brs = require('brs-js');
 
 // Helper for shallow equality
@@ -143,7 +147,7 @@ class WriteTool {
   }
 
   add(...args) {
-    this.bricks.push(args.map(b => this.brick(b)));
+    this.bricks.push(...args.map(b => this.brick(b)));
     return this;
   }
 

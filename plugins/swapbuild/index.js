@@ -1,3 +1,11 @@
+// documentation for this plugin
+const documentation = {
+  name: 'swapbuild',
+  description: 'Rotates builds between parallel hosted brikkit servers',
+  author: 'cake',
+  commands: [],
+};
+
 const fs = require('fs');
 const path = require('path');
 
@@ -77,6 +85,7 @@ module.exports = brikkit => {
   // prevent this brikkit from being re-added into swap networking
   if (brikkit._in_swap_network)
     return {
+      documentation,
       cleanup() {
         clearTimeouts();
       }
@@ -87,7 +96,9 @@ module.exports = brikkit => {
   network.push(brikkit);
   if (b.savePath('swap'))
     b.loadBricks('swap');
+
   return {
+    documentation,
     cleanup() {
       clearTimeouts();
     }

@@ -57,27 +57,7 @@ class Brikkit {
                this._brickadia.write(`${args.join(' ')}\n`);
 
            if(cmd === 'reload') {
-                try {
-                    // reload config
-                    this.config = this.config.reload();
-                    // update server config based on shared port
-                    this.server = this.config.servers.find(s => s.port === this.server.port);
-
-                    // server is now disabled
-                    if (!this.server) {
-                        this._brickadia.write('exit\n');
-                        return;
-                    }
-
-                    this.log('Reloading plugins...')
-                    this.debugSay('Reloading plugins...');
-                    const loadedPlugins = this._pluginSystem.loadAllPlugins();
-                    this.log(`Loaded ${loadedPlugins.length} plugins`);
-                    this.debugSay(`Loaded <color=\\"ffff00\\">${loadedPlugins.length}</> plugins.`);
-                } catch (e) {
-                    this.log('Error reloading plugins', e)
-                    this.debugSay('Error reloading plugins');
-                }
+                this.reloadPlugins();
            }
         });
 
@@ -97,6 +77,89 @@ class Brikkit {
         this._preStartParser = new Parser.PreStartParser();
         this._startParser = new Parser.StartParser();
         this._mapChangeParser = new Parser.MapChangeParser();
+    }
+
+    // reloads current plugins
+    reloadPlugins() {
+        try {
+            // reload config
+            this.config = this.config.reload();
+            // update server config based on shared port
+            this.server = this.config.servers.find(s => s.port === this.server.port);
+
+            // server is now disabled
+            if (!this.server) {
+                this._brickadia.write('exit\n');
+                return;
+            }
+
+            this.log('Reloading plugins...')
+            this.debugSay('Reloading plugins...');
+            const loadedPlugins = this._pluginSystem.loadAllPlugins();
+            this.log(`Loaded ${loadedPlugins.length} plugins`);
+            this.debugSay(`Loaded <color=\\"ffff00\\">${loadedPlugins.length}</> plugins.`);
+        } catch (e) {
+            this.log('Error reloading plugins', e)
+            this.debugSay('Error reloading plugins');
+        }
+    }
+
+    // show helptext
+    showHelp(message) {
+        const [_, ...args] = message.split(' ');
+
+        // available commands and documentation from the plugin system
+        const commands = this._pluginSystem.commands;
+        const docs = this._pluginSystem.documentation;
+
+        // no arguments
+        if (!args.length) {
+            this.say(`"Use <code>!help plugin</> or <code>!help !command</> for more information"`)
+            this.say(`"Installed Plugins: ${
+                Object.keys(docs).map(d => `<color=\\"c4d7f5\\">${d}</>`).join(', ')
+            }"`)
+
+        // plugin or command argument
+        } else if (args.length === 1) {
+            // argument is a plugin; render description, author, and commands
+            if (docs[args[0]]) {
+                const doc = docs[args[0]];
+                const desc = doc.description || 'no description';
+                this.say(`"<b>Plugin</> <code>${args[0]}</>: ${desc}"`);
+
+                if (doc.author)
+                    this.say(`"<b>Author</>: <color=\\"c4d7f5\\"><b>${doc.author}</></>"`);
+
+                if (doc.commands && doc.commands.length > 0)
+                    this.say(`"<b>Commands</>: ${doc.commands.map(c => `<code>${c.name}</>`).join(', ')}"`);
+
+            // argument is a command
+            } else if (commands[args[0]]) {
+                const doc = commands[args[0]];
+                const desc = doc.description || 'no description';
+                const example = doc.example || 'no example';
+                this.say(`"<b>Command</> <code>${doc.name}</>: ${desc}"`);
+                this.say(`"<b>Example</>: <code>${example}</>"`);
+                if (doc.args && doc.args.length > 0) {
+                    this.say(`"<b>Arguments</>:"`);
+                    for (const arg of doc.args) {
+                        const desc = arg.description || 'no description';
+                        this.say(`"- <code>${arg.name}</>${arg.required ? ' (required)' : ''}: ${desc}"`);
+                    }
+                } else {
+                    this.say(`"<b>Arguments</>: None"`);
+                }
+
+
+            // argument is not found
+            } else {
+                this.say(`"Could not find that command or plugin"`);
+            }
+
+        // too many arguments
+        } else {
+            this.say(`"Use <code>!help</> to list plugins and <code>!help plugin</> or <code>!help !command</> for more information"`);
+        }
     }
 
     /*
@@ -249,7 +312,13 @@ class Brikkit {
             const [username, message] = chatParserResult;
             const player = this.getPlayerFromUsername(username);
 
-            this._putEvent(new Event.ChatEvent(date, player, message));
+            // this is the only builtin command, helptext
+            if (message.startsWith('!help') && !this._disableHelp) {
+                this.showHelp(message);
+            } else {
+                this._putEvent(new Event.ChatEvent(date, player, message));
+            }
+
         }
 
         const exitParserResult = this._exitParser.parse(generator, restOfLine);

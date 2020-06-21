@@ -1,13 +1,49 @@
+// Documentation for this game, also for helptext generator
+const documentation = {
+  name: 'minesweeper',
+  description: 'Play and generate minesweeper games',
+  author: 'cake',
+  commands: [{
+    name: '!ms:start',
+    description: 'Start a game of minesweeper',
+    example: '!ms:start width:30 height:16 mines:130',
+    args: [
+      {name: 'size:#', description: 'sets width and height of game (default: 10)', required: false},
+      {name: 'width:#', description: 'sets width of game (default: 10)', required: false},
+      {name: 'height:#', description: 'sets height of game (default: 10)', required: false},
+      {name: 'mines:#', description: 'sets height of game (default: 15)', required: false},
+    ]
+  }, {
+    name: '!ms:mine',
+    description: 'Mine a tile in tile below the player in an active game',
+    example: '!ms:mine',
+    args: [],
+  }, {
+    name: '!ms:reset',
+    description: 'Clear all bricks and reset game data (config authorized only)',
+    example: '!ms:reset',
+    args: [],
+  }, {
+    name: '!ms:trust',
+    description: 'Toggle trust of user to play on your active games',
+    example: '!ms:trust Zeblote',
+    args: [
+      {name: 'username', description: 'Username of target player', required: true},
+    ],
+  }]
+};
+
 const brs = require('brs-js');
 const fs = require('fs');
 const { sanitize } = require('../../util.js');
-// try{require('disrequire')('./util.tool.js');}catch(e){console.log(e)}
-const { ParseTool, WriteTool, moveBricks, studs } = require('./util.tool.js');
-const PlayerPosProvider = require('./util.playerPos.js');
+
+const { ParseTool, WriteTool, moveBricks, studs } = require('../cakeutils/util.tool.js');
+const PlayerPosProvider = require('../cakeutils/util.playerPos.js');
+const CooldownProvider = require('../cakeutils/util.cooldown.js');
 
 // determine which tileset to use
 const MINESIZE = 8; // 4 is also an option for uglier and smaller grid
-const MINESAVE = __dirname + '/minetiles.brs';
+const MINESAVE = __dirname + '/tileset.brs';
 
 const minetiles = new ParseTool(brs.read(fs.readFileSync(MINESAVE)));
 
@@ -85,30 +121,28 @@ module.exports = brikkit => {
 
   // minesweeper state that persists across saves
   global.minesweepers = global.minesweepers || [];
+  global.minesweeperTrust = global.minesweeperTrust || {};
 
   const getPlayerPos = PlayerPosProvider(brikkit, deregister);
+  const cooldown = CooldownProvider(1000);
 
-  const lastCommand = {};
+  // helper for finding the game a player is over
+  const findGame = (x, y) => global.minesweepers.find(game =>
+    x >= game.left && y >= game.top && y < game.bottom && x < game.right && game.inProgress);
+
+  // determine if a user trusts another player
+  const hasTrust = (owner, user) =>
+    owner === user || global.minesweeperTrust[owner] && global.minesweeperTrust[owner].includes(user);
+
 
   deregister.push(brikkit.on('chat', evt => {
     const name = evt.getSender().getUsername();
     const [command, ...args] = evt.getContent().split(' ');
     const now = Date.now();
 
-    const cooldown = () => {
-      if (authorized.includes(name))
-        return true;
-
-      const isOk = !lastCommand[name] || (lastCommand[name] + 1000 < now);
-      if (isOk) {
-        lastCommand[name] = now;
-      }
-      return isOk;
-    };
-
-    if (command === '!start' && cooldown()) {
+    if (command === '!ms:start' && cooldown(name)) {
       if (global.minesweepers.find(m => m.name === name && m.inProgress)) {
-        brikkit.say(`"${sanitize(name)} already has a game in progress"`)
+        brikkit.say(`"<b>${sanitize(name)}</> already has a game in progress"`)
         return;
       }
 
@@ -144,7 +178,7 @@ module.exports = brikkit => {
       }
 
       if(mines > width * height - 5) {
-        brikkit.say(`"${sanitize(name)}'s game would have too many mines"`);
+        brikkit.say(`"<b>${sanitize(name)}</>'s game would have too many mines"`);
         return;
       }
 
@@ -154,7 +188,7 @@ module.exports = brikkit => {
         const top = y;
         const bottom = (y + height);
         const right = (x + width);
-        brikkit.say(`"${sanitize(name)} starting at (${left},${top}) (${width}x${height} ${mines} mines)"`)
+        brikkit.say(`"<b>${sanitize(name)}</> starting at (${left},${top}) (${width}x${height} ${mines} mines)"`)
 
         if (global.minesweepers.find(m =>
           !(left > m.right ||
@@ -162,7 +196,7 @@ module.exports = brikkit => {
            top > m.bottom ||
            bottom < m.top)
         )) {
-          brikkit.say(`"${sanitize(name)} can't start a game here"`)
+          brikkit.say(`"<b>${sanitize(name)}</> can't start a game here"`)
           return;
         }
 
@@ -197,23 +231,24 @@ module.exports = brikkit => {
     }
 
     // mine the current location
-    if (command === '!mine' && cooldown()) {
-      const game = global.minesweepers.find(m => m.name === name && m.inProgress);
-       if (!game) {
-        brikkit.say(`"${sanitize(name)} does not have a game in progress"`)
-        return;
-      }
-
+    if (command === '!ms:mine' && cooldown(name)) {
       // mine at a position
       const mine = (x, y) => {
+        const game = findGame(x, y);
+
+        if (!game) {
+          brikkit.say(`"<b>${sanitize(name)}</> not over an active game"`)
+          return;
+        }
+
+        if (!hasTrust(game.name, name)) {
+          brikkit.say(`"<b>${sanitize(game.name)}</> does not trust you to do that, <b>${sanitize(name)}</>"`)
+          return;
+        }
+
         const cx = x - game.x;
         const cy = y - game.y;
 
-        // check if the current position is in the grid
-        if (cx < 0 || cy < 0 || cy >= game.height || cx >= game.width) {
-          brikkit.say(`"${sanitize(name)} is off the grid"`)
-          return;
-        }
         let grid = [];
 
         // end game if there's a mine
@@ -230,7 +265,7 @@ module.exports = brikkit => {
           // end the game, add a frown
           game.inProgress = false;
           grid.push({tile: 'frown', pos: [-1, -1, 2]});
-          brikkit.say(`"<color=\\"ff9999\\"><b>${sanitize(name)}</> lost a game...</> (${game.width}x${game.height} ${game.mines} mines)"`)
+          brikkit.say(`"<color=\\"ff9999\\"><b>${sanitize(name)}</> lost a game${name !== game.name ? ` on <b>${sanitize(game.name)}</>'s behalf` : ' '}...</> (${game.width}x${game.height} ${game.mines} mines)"`)
         } else {
           const count = game.board.count(cx, cy);
           // render the count if there's more than 0
@@ -307,7 +342,27 @@ module.exports = brikkit => {
         .then(({x, y, z}) => mine(Math.round(x/MINESIZE/10), Math.round(y/MINESIZE/10)));
     }
 
-    if (command === '!reset' && authorized.includes(name)) {
+    // trust a player
+    if (command === '!ms:trust' && cooldown(name) && args[0]) {
+      if (!brikkit.getPlayerFromUsername(args[0])) {
+        brikkit.say(`"Could not find <b>${sanitize(args[0])}</>"`)
+        return;
+      }
+
+      if (!global.minesweeperTrust[name])
+        global.minesweeperTrust[name] = [];
+
+      if (global.minesweeperTrust[name].includes(args[0])) {
+        global.minesweeperTrust[name].splice(global.minesweeperTrust[name].indexOf(args[0]), 1);
+        brikkit.say(`"<b>${sanitize(name)}</> no longer trusts <b>${sanitize(args[0])}</> for minesweeper"`)
+      }
+      else {
+        global.minesweeperTrust[name].push(args[0]);
+        brikkit.say(`"<b>${sanitize(name)}</> now trusts <b>${sanitize(args[0])}</> for minesweeper"`)
+      }
+    }
+
+    if (command === '!ms:reset' && authorized.includes(name)) {
       global.minesweepers = [];
       brikkit.clearAllBricks();
       return;
@@ -318,5 +373,6 @@ module.exports = brikkit => {
     cleanup() {
       deregister.forEach(d => d());
     },
+    documentation,
   }
 };

@@ -1,3 +1,11 @@
+// documentation for this plugin
+const documentation = {
+  name: 'syncchat',
+  description: 'Synchronizes chat between parallel hosted brikkit servers',
+  author: 'cake',
+  commands: [],
+};
+
 const { sanitize } = require('../../util.js');
 
 module.exports = brikkit => {
@@ -20,6 +28,7 @@ module.exports = brikkit => {
   ];
 
   return {
+    documentation,
     cleanup() {
       deregister.forEach(d => d());
     },

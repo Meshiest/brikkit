@@ -10,6 +10,8 @@ class PluginSystem {
     constructor(brikkit) {
         this.brikkit = brikkit;
         this._plugins = {};
+        this.documentation = {};
+        this.commands = {};
     }
 
     getAvailablePlugins() {
@@ -18,6 +20,24 @@ class PluginSystem {
 
     loadPlugin(plugin) {
         return plugin.endsWith('zip') ? this._loadPluginZip(plugin) : this._loadPluginDirectory(plugin);
+    }
+
+    // generate documentation from loaded plugins
+    buildDocumentation() {
+        this.documentation = {};
+        this.commands = {};
+        for (const plugin of this.loadedPlugins) {
+            if (!plugin.documentation)
+                continue;
+
+            // add the documentation into a dictionary
+            this.documentation[plugin.documentation.name] = plugin.documentation;
+
+            // add all the commands into a dictionary
+            if (plugin.documentation.commands)
+                for (const cmd of plugin.documentation.commands)
+                    this.commands[cmd.name] = cmd;
+        }
     }
 
     loadAllPlugins() {
@@ -34,6 +54,7 @@ class PluginSystem {
         }
 
         const pluginPaths = this.getAvailablePlugins()
+            // only find plugins with index.js files
             .map(plugin => path.parse(plugin));
 
         // if 2 plugins have the same name (/example/ and /example.zip),
@@ -66,12 +87,15 @@ class PluginSystem {
             // filter all errored plugins
             .filter(p => p);
 
+        this.buildDocumentation();
+
         return this.loadedPlugins;
     }
 
     _loadPluginZip(plugin) {
         const path = tmp.dirSync().name;
         execSync(`unzip ./plugins/${plugin} -d ${path}`);
+
         try { disrequire(`${path}/index.js`); } catch (e) { }
 
         try {

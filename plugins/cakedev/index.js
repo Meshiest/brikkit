@@ -1,12 +1,59 @@
+const documentation = {
+  name: 'cakedev',
+  description: 'cake\'s debug plugin for writing new plugins',
+  author: 'cake',
+  commands: [{
+    name: '!origin',
+    description: '(debug) Places a single 1x1f brick at (0, 0, 0)',
+    example: '!origin',
+    args: [],
+  }, {
+    name: '!find',
+    description: '(debug) Displays position of the activating player',
+    example: '!find',
+    args: [],
+  }, {
+    name: '!brick',
+    description: '(debug) Places a bring under the activating player',
+    example: '!brick',
+    args: [],
+  }, {
+    name: '!parse',
+    description: '(debug) Reads the entire save into brs-js and displays player position and brick count',
+    example: '!parse',
+    args: [],
+  }, {
+    name: '!authorize',
+    description: 'Authorizes a player to use the !cage and !trap commands, only configured users can use this',
+    example: '!authorize Sixmorphugus',
+    args: [],
+  }, {
+    name: '!cage',
+    description: 'Trap the activating player in a cage',
+    example: '!cage',
+    args: [],
+  }, {
+    name: '!trap',
+    description: '',
+    example: '!trap Wrapperup',
+    args: [
+      {name: 'target', description: 'Player to trap', required: true},
+      {name: 'please', description: 'The word \\"please\\" to make the bricks public', required: false},
+    ],
+  }]
+};
+
 const brs = require('brs-js');
 const fs = require('fs');
 const { sanitize } = require('../../util.js');
 // try{require('disrequire')('./util.tool.js');}catch(e){console.log(e)}
-const { moveBricks, studs } = require('./util.tool.js');
-const PlayerPosProvider = require('./util.playerPos.js');
-const SaveParseProvider = require('./util.saveParse.js');
+const { moveBricks, studs, ParseTool, WriteTool } = require('../cakeutils/util.tool.js');
+const PlayerPosProvider = require('../cakeutils/util.playerPos.js');
+const SaveParseProvider = require('../cakeutils/util.saveParse.js');
+const CooldownProvider = require('../cakeutils/util.cooldown.js');
 
 const cage = brs.read(fs.readFileSync(__dirname  + '/cage.brs'));
+
 const author = {
   id: '64f876ca-d34a-4468-a755-7be03c722944',
   name: 'Gen',
@@ -47,43 +94,30 @@ module.exports = brikkit => {
 
   const getPlayerPos = PlayerPosProvider(brikkit, deregister);
   const saveAndParse = SaveParseProvider(brikkit);
-
-  const lastCommand = {};
+  const cooldown = CooldownProvider(1000);
 
   deregister.push(brikkit.on('chat', evt => {
     const name = evt.getSender().getUsername();
     const [command, ...args] = evt.getContent().split(' ');
-    const now = Date.now();
 
     const auth = (name === 'cake' || global.authorized.includes(name));
 
-    const cooldown = () => {
-      if (name === 'cake')
-        return true;
-
-      const isOk = !lastCommand[name] || (lastCommand[name] + 1000 < now);
-      if (isOk) {
-        lastCommand[name] = now;
-      }
-      return isOk;
-    };
-
-    if (command === '!origin' && cooldown() && auth) {
+    if (command === '!origin' && cooldown(name) && auth) {
       brikkit.writeSaveData('brick', createBrick(0, 0, 0));
       brikkit.loadBricks('brick');
     }
 
-    if (command === '!parse' && name === 'cake' && cooldown()) {
+    if (command === '!parse' && name === 'cake' && cooldown(name)) {
         Promise.all([saveAndParse('parsed'), getPlayerPos(name)])
         .catch(() => brikkit.say(`"Could load data or get pos"`))
         .then(([save, {x, y, z}]) => {
           if (save) {
-            brikkit.say(`"Found ${save.bricks.length} bricks, player @ &lt;${x}, ${y}, ${z}&gt;`);
+            brikkit.say(`"Found ${save.bricks.length} bricks, player @ &lt;${x}, ${y}, ${z}&gt;"`);
           }
         });
     }
 
-    if (command === '!find' && cooldown() && auth) {
+    if (command === '!find' && cooldown(name) && auth) {
       getPlayerPos(name)
         .then(({x, y, z}) => {
           brikkit.say(`"Found ${name} @ &lt;${x}, ${y}, ${z}&gt;"`);
@@ -91,7 +125,7 @@ module.exports = brikkit => {
         .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`));
 
     }
-    if (command === '!brick' && cooldown() && auth) {
+    if (command === '!brick' && cooldown(name) && auth) {
       getPlayerPos(name)
         .then(({x, y, z}) => {
           brikkit.writeSaveData('brick_' + name, createBrick(x, y, z - 30));
@@ -100,7 +134,7 @@ module.exports = brikkit => {
         .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`));
     }
 
-    if (command === '!cage' && cooldown() && auth) {
+    if (command === '!cage' && cooldown(name) && auth) {
       getPlayerPos(name)
         .then(({x, y, z}) => {
           x = Math.round(x);
@@ -112,7 +146,7 @@ module.exports = brikkit => {
         .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`));
     }
 
-    if (command === '!trap' && cooldown() && args[0] && auth) {
+    if (command === '!trap' && cooldown(name) && args[0] && auth) {
       getPlayerPos(args[0])
         .then(({x, y, z}) => {
           x = Math.round(x);
@@ -143,6 +177,7 @@ module.exports = brikkit => {
   }));
 
   return {
+    documentation,
     cleanup() {
       deregister.forEach(d => d());
     }

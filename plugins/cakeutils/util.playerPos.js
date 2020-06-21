@@ -1,3 +1,7 @@
+/*
+  cake's player finding tool w/ console command support from Aware
+*/
+
 // get a player's position
 module.exports = (brikkit, deregister) => playerName => {
   const write = str => brikkit._brickadia.write(str + '\n');
