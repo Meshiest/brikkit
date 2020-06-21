@@ -42,7 +42,7 @@ module.exports = brikkit => {
         .then(({x, y, z}) => {
           // generate text and write to save
           brikkit.writeSaveData('text_' + name, font.text(args.join(' '), {
-            shift: [x, y, z - 26],
+            shift: [x, y, z - 27],
             color: textColors[name] || [0, 0, 0],
             author: {
               id: brikkit.getPlayerFromUsername(name).getUserId(),
