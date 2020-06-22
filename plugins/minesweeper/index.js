@@ -3,6 +3,11 @@ const documentation = {
   name: 'minesweeper',
   description: 'Play and generate minesweeper games',
   author: 'cake',
+  configFormat: {
+    authorized: [ // list of authorized users
+      'username',
+    ],
+  },
   commands: [{
     name: '!ms:start',
     description: 'Start a game of minesweeper',
@@ -19,9 +24,9 @@ const documentation = {
     example: '!ms:mine',
     args: [],
   }, {
-    name: '!ms:reset',
+    name: '!ms:clearall',
     description: 'Clear all bricks and reset game data (config authorized only)',
-    example: '!ms:reset',
+    example: '!ms:clearall',
     args: [],
   }, {
     name: '!ms:trust',
@@ -196,7 +201,7 @@ module.exports = brikkit => {
            top > m.bottom ||
            bottom < m.top)
         )) {
-          brikkit.say(`"<b>${sanitize(name)}</> can't start a game here"`)
+          brikkit.say(`"<b>${sanitize(name)}</> can't start a game here (overlap)"`)
           return;
         }
 
@@ -343,26 +348,27 @@ module.exports = brikkit => {
     }
 
     // trust a player
-    if (command === '!ms:trust' && cooldown(name) && args[0]) {
-      if (!brikkit.getPlayerFromUsername(args[0])) {
-        brikkit.say(`"Could not find <b>${sanitize(args[0])}</>"`)
+    if (command === '!ms:trust' && cooldown(name) && args.length > 0) {
+      const target = args.join(' ');
+      if (!brikkit.getPlayerFromUsername(args.join(' '))) {
+        brikkit.say(`"Could not find <b>${sanitize(target)}</>"`)
         return;
       }
 
       if (!global.minesweeperTrust[name])
         global.minesweeperTrust[name] = [];
 
-      if (global.minesweeperTrust[name].includes(args[0])) {
-        global.minesweeperTrust[name].splice(global.minesweeperTrust[name].indexOf(args[0]), 1);
-        brikkit.say(`"<b>${sanitize(name)}</> no longer trusts <b>${sanitize(args[0])}</> for minesweeper"`)
+      if (global.minesweeperTrust[name].includes(target)) {
+        global.minesweeperTrust[name].splice(global.minesweeperTrust[name].indexOf(target), 1);
+        brikkit.say(`"<b>${sanitize(name)}</> no longer trusts <b>${sanitize(target)}</> for minesweeper"`)
       }
       else {
-        global.minesweeperTrust[name].push(args[0]);
-        brikkit.say(`"<b>${sanitize(name)}</> now trusts <b>${sanitize(args[0])}</> for minesweeper"`)
+        global.minesweeperTrust[name].push(target);
+        brikkit.say(`"<b>${sanitize(name)}</> now trusts <b>${sanitize(target)}</> for minesweeper"`)
       }
     }
 
-    if (command === '!ms:reset' && authorized.includes(name)) {
+    if (command === '!ms:clearall' && authorized.includes(name)) {
       global.minesweepers = [];
       brikkit.clearAllBricks();
       return;

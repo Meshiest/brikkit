@@ -124,7 +124,17 @@ class WriteTool {
   }
 
   // create a brick
-  brick({asset='PB_DefaultBrick', material='BMC_Plastic', position, rotation=0, direction=4, color=[255, 255, 255, 255], size=[10, 10, 10]}) {
+  brick({
+    asset='PB_DefaultBrick',
+    material='BMC_Plastic',
+    position,
+    rotation=0,
+    direction=4,
+    color=[255, 255, 255, 255],
+    size=[10, 10, 10],
+    visibility=true,
+    collision=true,
+  }) {
     return {
       asset_name_index: this.findAsset(asset),
       color,
@@ -133,6 +143,8 @@ class WriteTool {
       rotation,
       direction,
       position,
+      visibility,
+      collision,
     };
   }
 

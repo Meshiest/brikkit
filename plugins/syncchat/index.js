@@ -3,6 +3,9 @@ const documentation = {
   name: 'syncchat',
   description: 'Synchronizes chat between parallel hosted brikkit servers',
   author: 'cake',
+  configFormat: {
+    id: 'identifier', // this id will be shown to users on other servers as [identifier] name: message
+  },
   commands: [],
 };
 

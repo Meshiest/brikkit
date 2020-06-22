@@ -10,9 +10,9 @@ const documentation = {
       {name: 'text', description: 'text to generate', required: true},
     ],
   }, {
-    name: '!textcolor',
+    name: '!text:color',
     description: '',
-    example: '!textcolor FF00FF',
+    example: '!text:color FF00FF',
     args: [
       {name: 'hexcolor', description: 'hex color (000000-FFFFFF) to assign to generated text', required: true},
     ],
@@ -61,7 +61,7 @@ module.exports = brikkit => {
     }
 
     // set text generation color
-    if (command === '!textcolor' && cooldown(name)) {
+    if (command === '!text:color' && cooldown(name)) {
       if(args[0].match(/^[0-9A-F]{6}$/i)) {
         textColors[name] = [parseInt(args[0].slice(0, 2), 16), parseInt(args[0].slice(2, 4), 16), parseInt(args[0].slice(4, 6), 16)];
         brikkit.say(`"Setting <b>${sanitize(name)}</> color to #<color=\\"${args[0]}\\">${args[0].toUpperCase()}</>"`);

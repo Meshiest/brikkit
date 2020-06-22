@@ -150,6 +150,9 @@ class Brikkit {
                     this.say(`"<b>Arguments</>: None"`);
                 }
 
+            // user takes the helptext literally
+            } else if (arg[0] === '!command' || arg[0] === 'plugin') {
+                this.say(`"Use <code>!help &lt;name of plugin&gt;</> or <code>!help &lt;name of !command&gt;</> for more help for the respective plugin or command"`);
 
             // argument is not found
             } else {

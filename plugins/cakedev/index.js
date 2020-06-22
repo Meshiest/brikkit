@@ -190,7 +190,7 @@ some notes
 
 brikkit._brickadia.write(`\n`);
 
-cmd Get BRPlayerState PlayerName Name=BP_PlayerState_C_0
+cmd GetAll BRPlayerState PlayerName
 cmd GetAll BRPlayerState Owner Name=BP_PlayerState_C_0
 cmd GetAll BP_PlayerController_C Pawn Name=BP_PlayerController_C_0
 cmd GetAll SceneComponent RelativeLocation Name=CollisionCylinder Outer=BP_FigureV2_C_0
