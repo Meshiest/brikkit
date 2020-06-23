@@ -10,23 +10,22 @@ const fs = require('fs');
 const path = require('path');
 
 // servers in the network
-const network = [];
+global.swapNetwork = global.swapNetwork || [];
 
-const emit = msg => network.forEach(b => b.say(msg));
-let swapTimeout, loadTimeout;
+const emit = msg => global.swapNetwork.forEach(b => b.say(msg));
 
 const SWAP_LEN = 60;
 
-let timeouts = [];
+global.swapTimeouts = global.swapTimeouts || [];
 function clearTimeouts() {
-  timeouts.forEach(t => clearTimeout(t));
-  timeouts = [];
+  global.swapTimeouts.forEach(t => clearTimeout(t));
+  global.swapTimeouts = [];
 }
 
 function swap() {
   // save on all servers
   emit('"Saving all servers..."');
-  network.forEach((b, i) => {
+  global.swapNetwork.forEach((b, i) => {
     b.say('"Saving..."')
     // delete old save
     if (b.savePath('swap'))
@@ -35,7 +34,7 @@ function swap() {
     b.say('"Saved..."');
   });
 
-  const getSaves = () => network.map(b => [b, b.savePath('swap')]);
+  const getSaves = () => global.swapNetwork.map(b => [b, b.savePath('swap')]);
 
   let times = 0;
   // load saves
@@ -45,19 +44,17 @@ function swap() {
     // check if every server has their saves
     let saves = getSaves();
     if (saves.some(s => !s[1]) && times < 10) {
-      timeouts.push(setTimeout(load, 500));
+      global.swapTimeouts.push(setTimeout(load, 500));
       times ++;
       return;
     }
 
     emit('"All servers saved. Loading new saves!');
-    network.forEach((b, i) => {
+    global.swapNetwork.forEach((b, i) => {
       // copy file from the next server to this one
-      let source = network[(i + 1) % network.length].savePath('swap');
+      let source = global.swapNetwork[(i + 1) % global.swapNetwork.length].savePath('swap');
       if (source) {
         fs.copyFileSync(source, path.join(b._brickadia.SAVES_PATH, 'swapped.brs'));
-
-
         b.say('"Clearing and Loading..."');
         b.clearAllBricks();
         b.loadBricks('swapped');
@@ -67,23 +64,25 @@ function swap() {
       }
     });
 
-    timeouts.push(setTimeout(() => emit("Swap in 5 seconds"), (SWAP_LEN - 5) * 1000));
-    timeouts.push(setTimeout(() => emit("Swap in 10 seconds"), (SWAP_LEN - 10) * 1000));
-    timeouts.push(setTimeout(() => emit("Swap in 30 seconds"), (SWAP_LEN - 30) * 1000));
-    timeouts.push(setTimeout(swap, SWAP_LEN * 1000));
+    global.swapTimeouts.push(setTimeout(() => emit('"Swap in <color=\\"ffff00\\"><b>5 seconds</></>"'), (SWAP_LEN - 5) * 1000));
+    global.swapTimeouts.push(setTimeout(() => emit('"Swap in <color=\\"ffff00\\"><b>10 seconds</></>"'), (SWAP_LEN - 10) * 1000));
+    global.swapTimeouts.push(setTimeout(() => emit('"Swap in <color=\\"ffff00\\"><b>30 seconds</></>"'), (SWAP_LEN - 30) * 1000));
+    global.swapTimeouts.push(setTimeout(swap, SWAP_LEN * 1000));
   }
 
   load();
 }
 
-timeouts.push(setTimeout(() => emit("Swap in 5 seconds"), (SWAP_LEN - 5) * 1000));
-timeouts.push(setTimeout(() => emit("Swap in 10 seconds"), (SWAP_LEN - 10) * 1000));
-timeouts.push(setTimeout(() => emit("Swap in 30 seconds"), (SWAP_LEN - 30) * 1000));
-timeouts.push(setTimeout(swap, SWAP_LEN * 1000));
+console.log('starting timeout', global.swapNetwork.length);
+clearTimeouts();
+global.swapTimeouts.push(setTimeout(() => emit('"Swap in <color=\\"ffff00\\"><b>5 seconds</></>"'), (SWAP_LEN - 5) * 1000));
+global.swapTimeouts.push(setTimeout(() => emit('"Swap in <color=\\"ffff00\\"><b>10 seconds</></>"'), (SWAP_LEN - 10) * 1000));
+global.swapTimeouts.push(setTimeout(() => emit('"Swap in <color=\\"ffff00\\"><b>30 seconds</></>"'), (SWAP_LEN - 30) * 1000));
+global.swapTimeouts.push(setTimeout(swap, SWAP_LEN * 1000));
 
 module.exports = brikkit => {
   // prevent this brikkit from being re-added into swap networking
-  if (brikkit._in_swap_network)
+  if (brikkit._save_swap_init)
     return {
       documentation,
       cleanup() {
@@ -92,10 +91,8 @@ module.exports = brikkit => {
     };
 
   const id = ((brikkit.server.config || {}).swapbuild || {}).id;
-  brikkit._in_swap_network = true;
-  network.push(brikkit);
-  if (b.savePath('swap'))
-    b.loadBricks('swap');
+  brikkit._save_swap_init = true;
+  global.swapNetwork.push(brikkit);
 
   return {
     documentation,

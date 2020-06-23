@@ -26,6 +26,8 @@ module.exports = brikkit => {
     brikkit.on('chat', evt => {
       const user = evt.getSender().getUsername();
       const msg = evt.getContent();
+      if (msg.startsWith('!'))
+        return;
       broadcast(`"[<color=\\"c4d7f5\\">${id}</>] <color=\\"f7f6cb\\"><b>${sanitize(user)}</></>: ${sanitize(msg)}"`);
     }),
   ];
