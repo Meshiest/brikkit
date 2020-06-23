@@ -171,19 +171,18 @@ class WriteTool {
   write() {
     const author = this.author;
 
-    // overwrite ownership
-    this.bricks.forEach(b => {
-      b.owner_index = 1;
-    });
+    const authors = this.authors || [];
 
-    for(const b of this.bricks)
-      b.owner_index = 1;
+    // overwrite ownership
+    if (authors.length === 0)
+      for(const b of this.bricks)
+        b.owner_index = 1;
 
     const output = {
       author,
       description: 'Generated Save',
       map: 'brs-js',
-      brick_owners: [author],
+      brick_owners: [author, ...authors],
       materials: deIndexify(this.materials),
       brick_assets: deIndexify(this.assets),
       colors: this.colors,
