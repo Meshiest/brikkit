@@ -18,6 +18,11 @@ const documentation = {
     example: '!brick',
     args: [],
   }, {
+    name: '!colorwheel',
+    description: '(debug) Render 3 sRGB and 3 LinearRGB color wheels',
+    example: '!colorwheel',
+    args: [],
+  }, {
     name: '!parse',
     description: '(debug) Reads the entire save into brs-js and displays player position and brick count',
     example: '!parse',
@@ -51,6 +56,7 @@ const { moveBricks, studs, ParseTool, WriteTool } = require('../cakeutils/util.t
 const PlayerPosProvider = require('../cakeutils/util.playerPos.js');
 const SaveParseProvider = require('../cakeutils/util.saveParse.js');
 const CooldownProvider = require('../cakeutils/util.cooldown.js');
+const { hsv, linearRGB } = require('../cakeutils/util.color.js');
 
 const cage = brs.read(fs.readFileSync(__dirname  + '/cage.brs'));
 
@@ -74,7 +80,24 @@ const createBrick = (x, y, z) => ({
     collision: true,
     direction: 4,
   }],
-})
+});
+
+const createBricks = arr => ({
+  author,
+  description: 'generate test',
+  brick_owners: [author],
+  brick_assets: ['PB_DefaultTile', 'PB_DefaultBrick'],
+  bricks: arr.map(({pos: [x, y, z], color=[255,255,255,255]}) => ({
+    asset_name_index: 1,
+    size: [5, 5, 2],
+    position: [Math.round(x), Math.round(y), Math.round(z)],
+    color,
+    rotation: 0,
+    visibility: true,
+    collision: true,
+    direction: 4,
+  })),
+});
 
 const createCage = (author, {x, y, z}) => ({
   author,
@@ -130,6 +153,56 @@ module.exports = brikkit => {
         .then(({x, y, z}) => {
           brikkit.writeSaveData('brick_' + name, createBrick(x, y, z - 30));
           brikkit.loadBricks('brick_' + name);
+        })
+        .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`));
+    }
+
+    if (command === '!colorwheel' && cooldown(name) && auth) {
+      getPlayerPos(name)
+        .then(({x, y, z}) => {
+          const size = 128;
+          const bricks = [];
+
+          for (let i = 0; i < size; i++)
+            for (let j = 0; j < size; j++) {
+              const value = Math.hypot(i - size/2, j - size/2)/(size/2);
+              const hue = (Math.atan2(j - size/2, i - size/2) + Math.PI)/Math.PI/2;
+              if (value <= 1) {
+                bricks.push({
+                  pos: [x + (i - size/2)*10, y + (j - size/2) * 10, z - 24],
+                  color: [...hsv(hue, value, 1), 255],
+                });
+                bricks.push({
+                  pos: [x + (i - size/2)*10, y + (j + size - size/2) * 10, z - 24],
+                  color: [...linearRGB(hsv(hue, value, 1)), 255],
+                });
+               bricks.push({
+                  pos: [x + (i + size - size/2)*10, y + (j - size/2) * 10, z - 24],
+                  color: [...hsv(hue, 1, value), 255],
+                });
+                bricks.push({
+                  pos: [x + (i + size - size/2)*10, y + (j + size - size/2) * 10, z - 24],
+                  color: [...linearRGB(hsv(hue, 1, value)), 255],
+                });
+                bricks.push({
+                  pos: [x + (i + size * 2 - size/2)*10, y + (j - size/2) * 10, z - 24],
+                  color: [...hsv(hue, value, value), 255],
+                });
+                bricks.push({
+                  pos: [x + (i + size * 2 - size/2)*10, y + (j + size - size/2) * 10, z - 24],
+                  color: [...linearRGB(hsv(hue, value, value)), 255],
+                });
+              }
+            }
+
+          try {
+            brs.write(createBricks(bricks));
+          } catch (e) {
+            console.error(e);
+          }
+          brikkit.writeSaveData('color_' + name, createBricks(bricks));
+          // brikkit.writeSaveData('color_' + name, createBrick(x, y, z));
+          brikkit.loadBricks('color_' + name);
         })
         .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`));
     }

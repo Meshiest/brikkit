@@ -37,6 +37,7 @@ const { sanitize } = require('../../util.js');
 const PlayerPosProvider = require('../cakeutils/util.playerPos.js');
 const fontParser = require('../cakeutils/util.fontParser.js');
 const CooldownProvider = require('../cakeutils/util.cooldown.js');
+const { linearRGB } = require('../cakeutils/util.color.js');
 
 // load in saves in font_fontname.brs format
 const fonts = Object.fromEntries(fs.readdirSync(__dirname)
@@ -46,10 +47,12 @@ const fonts = Object.fromEntries(fs.readdirSync(__dirname)
 
 module.exports = brikkit => {
   const deregister = [];
+
   const getPlayerPos = PlayerPosProvider(brikkit, deregister);
-  global.textColors = global.textColors || {};
-  global.textFont = global.textFont || {};
   const cooldown = CooldownProvider(1000);
+
+  global.textColors = global.textColors || {};
+  global.textFonts = global.textFonts || {};
 
   deregister.push(brikkit.on('chat', evt => {
     const name = evt.getSender().getUsername();
@@ -63,7 +66,7 @@ module.exports = brikkit => {
           y = Math.floor(y)
           z = Math.floor(z)
           // generate text and write to save
-          brikkit.writeSaveData('text_' + name, fonts[global.textFont[name] || 'default'].text(args.join(' '), {
+          brikkit.writeSaveData('text_' + name, fonts[global.textFonts[name] || 'default'].text(args.join(' '), {
             shift: [x, y, z - 27],
             color: global.textColors[name] || [0, 0, 0],
             author: {
@@ -82,7 +85,7 @@ module.exports = brikkit => {
     // set text generation color
     if (command === '!text:color' && cooldown(name)) {
       if(args[0].match(/^[0-9A-F]{6}$/i)) {
-        global.textColors[name] = [parseInt(args[0].slice(0, 2), 16), parseInt(args[0].slice(2, 4), 16), parseInt(args[0].slice(4, 6), 16)];
+        global.textColors[name] = linearRGB([parseInt(args[0].slice(0, 2), 16), parseInt(args[0].slice(2, 4), 16), parseInt(args[0].slice(4, 6), 16)]);
         brikkit.say(`"Setting <b>${sanitize(name)}</> color to #<color=\\"${args[0]}\\">${args[0].toUpperCase()}</>"`);
       }
     }
@@ -90,7 +93,7 @@ module.exports = brikkit => {
     // set text generation font
     if (command === '!text:font' && cooldown(name)) {
       if(fonts[args[0]]) {
-        global.textFont[name] = args[0];
+        global.textFonts[name] = args[0];
         brikkit.say(`"Setting <b>${sanitize(name)}</> font to <b>${args[0]}</>"`);
       }
     }

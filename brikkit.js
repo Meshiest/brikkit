@@ -227,6 +227,7 @@ class Brikkit {
         try {
             return brs.read(fs.readFileSync(file));
         } catch (e) {
+            console.error(e);
             return null;
         }
     }
@@ -238,6 +239,7 @@ class Brikkit {
             fs.writeFileSync(file, new Uint8Array(brs.write(data)));
             return true;
         } catch (e) {
+            console.error(e);
             return false;
         }
     }
