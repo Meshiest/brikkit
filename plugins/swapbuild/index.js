@@ -73,7 +73,6 @@ function swap() {
   load();
 }
 
-console.log('starting timeout', global.swapNetwork.length);
 clearTimeouts();
 global.swapTimeouts.push(setTimeout(() => emit('"Swap in <color=\\"ffff00\\"><b>5 seconds</></>"'), (SWAP_LEN - 5) * 1000));
 global.swapTimeouts.push(setTimeout(() => emit('"Swap in <color=\\"ffff00\\"><b>10 seconds</></>"'), (SWAP_LEN - 10) * 1000));
