@@ -31,7 +31,7 @@ function hsv(h, s, v) {
 // convert a color into the weird linearRGB format
 const linearRGB = rgba =>
   rgba.map((c, i) => i === 3
-      ? i
+      ? c
       : Math.round(((c/255) > 0.04045 ? Math.pow((c/255) * (1.0 / 1.055) + 0.0521327, 2.4 ) : (c/255) * (1.0 / 12.92))*255)
   )
 
