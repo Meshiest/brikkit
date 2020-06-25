@@ -16,7 +16,7 @@ const documentation = {
       {name: 'size:#', description: 'sets width and height of game (default: 10)', required: false},
       {name: 'width:#', description: 'sets width of game (default: 10)', required: false},
       {name: 'height:#', description: 'sets height of game (default: 10)', required: false},
-      {name: 'mines:#', description: 'sets height of game (default: 15)', required: false},
+      {name: 'mines:#', description: 'sets height of game (default: 15% of size)', required: false},
       {name: 'quiet', description: 'start an unscripted game (hammer to play)', required: false},
     ]
   }, {
@@ -111,7 +111,7 @@ const getTileSave = getTileSaveProvider(defaultTileset);
 const getTileSaveStatic = getTileSaveProvider(staticTileset);
 
 // populate a minesweeper board with mines, provide some helper funcs
-const genMinesweeperBoard = (width, height, mines) => {
+const genMinesweeperBoard = (width, height, mines, banned=[]) => {
   // build the board widthxheight
   const board = Array.from({length: width})
     .map(() => Array.from({length: height}).fill(0));
@@ -119,13 +119,16 @@ const genMinesweeperBoard = (width, height, mines) => {
   // rand helper fn
   const rand = n => Math.floor(Math.random() * n);
 
+  // out of bounds
+  const oob = (x, y) => (x === 0 && y === 0 || x === 0 && y === height-1 || x === width-1 && y === 0 || x === width-1 && y === height-1);
+
   // place a mine on the board
   const placeMine = () => {
     let x, y;
     do {
       x = rand(width);
       y = rand(height);
-    } while(board[x][y] === 1 || (x === 0 && y === 0 || x === 0 && y === height-1 || x === width-1 && y === 0 || x === width-1 && y === height-1));
+    } while(board[x][y] === 1 || oob(x, y) || banned.some(b => b[0] === x && b[1] === y));
     board[x][y] = 1;
   };
 
@@ -181,7 +184,7 @@ module.exports = brikkit => {
       // default game setup
       let width = 10;
       let height = 10;
-      let mines = 15;
+      let mines = 0;
       let static = false;
 
       // parse key:val from args
@@ -214,6 +217,9 @@ module.exports = brikkit => {
         }
       }
 
+      if (mines === 0)
+        mines = Math.round(width * height * 0.15); // default game is 15% mines, yields ~ 50% win ratio
+
       if(mines > width * height - 5) {
         brikkit.say(`"<b>${sanitize(name)}</>'s game would have too many mines"`);
         return;
@@ -225,7 +231,7 @@ module.exports = brikkit => {
         const top = y;
         const bottom = (y + height);
         const right = (x + width);
-        brikkit.say(`"<b>${sanitize(name)}</> starting at (${left},${top}) (${width}x${height} ${mines} mines)"`)
+        brikkit.say(`"<b>${sanitize(name)}</> starting at (${left},${top}) (${width}x${height} ${mines} mines = ${Math.round(mines/(width*height)*100)}%)"`)
 
         if (global.minesweepers.find(m =>
           !(left > m.right ||
@@ -249,9 +255,7 @@ module.exports = brikkit => {
 
         game.generated = Array.from({length: width})
           .map(() => Array.from({length: height}).fill(0));
-
         let grid = [];
-        game.board = genMinesweeperBoard(game.width, game.height, mines);
         grid.push({tile: 'smile', pos: [-1 + left, -1 + top, -1]});
         for (let i = 0; i < game.width; i++)
           for (let j = 0; j < game.height; j++)
@@ -267,7 +271,7 @@ module.exports = brikkit => {
         const top = y;
         const bottom = (y + height);
         const right = (x + width);
-        brikkit.say(`"<b>${sanitize(name)}</> starting (quiet) at (${left},${top}) (${width}x${height} ${mines} mines)"`)
+        brikkit.say(`"<b>${sanitize(name)}</> starting (quiet) at (${left},${top}) (${width}x${height} ${mines} mines = ${Math.round(mines/(width*height)*100)}%)"`)
 
         if (global.minesweepers.find(m =>
           !(left > m.right ||
@@ -345,6 +349,9 @@ module.exports = brikkit => {
 
         let grid = [];
 
+        if (!game.board)
+          game.board = genMinesweeperBoard(game.width, game.height, game.mines, [[cx, cy]]);
+
         // end game if there's a mine
         if(game.board.isMine(cx, cy)) {
           // render an X at this mine
@@ -359,12 +366,15 @@ module.exports = brikkit => {
           // end the game, add a frown
           game.inProgress = false;
           grid.push({tile: 'frown', pos: [-1, -1, 0]});
-          brikkit.say(`"<color=\\"ff9999\\"><b>${sanitize(name)}</> lost a game${name !== game.name ? ` on <b>${sanitize(game.name)}</>'s behalf` : ' '}...</> (${game.width}x${game.height} ${game.mines} mines)"`)
+          brikkit.say(`"<color=\\"ff9999\\"><b>${sanitize(name)}</> lost a game${
+            name !== game.name ? ` on <b>${sanitize(game.name)}</>'s behalf` : ' '
+          }...</> (${game.width}x${game.height} ${game.mines} mines = ${Math.round(game.mines/(game.width*game.height)*100)}%)"`);
         } else {
           const count = game.board.count(cx, cy);
           // render the count if there's more than 0
           if (count > 0) {
-            grid.push({tile: count, pos: [cx, cy, 0]});
+            grid.push({tile: 0, pos: [cx, cy, 0]});
+            grid.push({tile: count, pos: [cx, cy, 1]});
           } else {
             // otherwise recursively reveal the cells that are adjacent to connecting 0's
             let revealed = {};
@@ -378,11 +388,13 @@ module.exports = brikkit => {
 
               // render the count
               const count = game.board.count(x, y);
-              grid.push({tile: count, pos: [x, y, 0]});
+              grid.push({tile: 0, pos: [x, y, 0]});
 
               // don't recurse if this is nonzero
-              if (count !== 0)
+              if (count !== 0) {
+                grid.push({tile: count, pos: [x, y, 1]});
                 return;
+              }
 
               // reveal in all 8 directions if not already revealed
               if (y > 0 && hidden(x, y - 1)) reveal(x, y - 1);
@@ -428,7 +440,7 @@ module.exports = brikkit => {
 
         // announce win
         if (win)
-          brikkit.say(`"<color=\\"99ff99\\"><b>${sanitize(name)}</> finished a game!</> (${game.width}x${game.height} ${game.mines} mines)"`)
+          brikkit.say(`"<color=\\"99ff99\\"><b>${sanitize(name)}</> finished a game!</> (${game.width}x${game.height} ${game.mines} mines = ${Math.round(game.mines/(game.width*game.height)*100)}%)"`)
       }
 
       getPlayerPos(name)
