@@ -31,6 +31,8 @@ class Chunkloader {
 
     this.loadedChunks = {};
 
+    this.assets = []; // extra brick assets
+
     this.chunkloaderIntervals = [];
     deregister.push(this.stopChunkloading.bind(this));
     this.nextFrame = this.nextFrame.bind(this);
@@ -71,7 +73,6 @@ class Chunkloader {
 
   // render an array of screens
   renderChunks(chunks) {
-    console.log('rendering');
     // filter out underground or already loaded chunks
     chunks = chunks.filter(c => c.z >=0 && !c.loaded);
 
@@ -83,25 +84,25 @@ class Chunkloader {
         if (block) {
           n ++; // increase brick count
           // replace old brick with new block
-          chunk.blocks[i] = {
-            asset_name_index: block.tile ? 0 : 1,
-            size: [this.blockSize / 2, this.blockSize / 2, this.blockSize / 2],
-            position: [
-              Math.round(this.blockSize/2 + this.blockSize * (block.x + this.chunkSize * chunk.x)),
-              Math.round(this.blockSize/2 + this.blockSize * (block.y + this.chunkSize * chunk.y)),
-              Math.round(this.blockSize/2 + this.blockSize * (block.z + this.chunkSize * chunk.z)),
-            ],
-            color: linearRGB(block.color || [255, 255, 255, 255]),
-            rotation: 0,
-            visibility: true,
-            collision: true,
-            direction: 4,
-          };
+          if (typeof block.asset_name_index === 'undefined')
+            chunk.blocks[i] = {
+              asset_name_index: block.tile ? 0 : 1,
+              size: [this.blockSize / 2, this.blockSize / 2, this.blockSize / 2],
+              position: [
+                Math.round(this.blockSize/2 + this.blockSize * (block.x + this.chunkSize * chunk.x)),
+                Math.round(this.blockSize/2 + this.blockSize * (block.y + this.chunkSize * chunk.y)),
+                Math.round(this.blockSize/2 + this.blockSize * (block.z + this.chunkSize * chunk.z)),
+              ],
+              color: linearRGB(block.color || [255, 255, 255, 255]),
+              rotation: 0,
+              visibility: true,
+              collision: true,
+              direction: 4,
+            };
         }
       }
       return n;
     }, 0);
-    console.log('brickCount', brickCount);
 
     // memory allocation is slower than iterating so rather than using .flatMap.filter.map/etc
     // it is faster to loop twice and allocate once
@@ -121,7 +122,7 @@ class Chunkloader {
       author,
       description: 'generate test',
       brick_owners: [author],
-      brick_assets: ['PB_DefaultTile', 'PB_DefaultBrick'],
+      brick_assets: ['PB_DefaultTile', 'PB_DefaultBrick', ...this.assets],
       bricks,
     };
   }
@@ -152,7 +153,6 @@ class Chunkloader {
 
         // only load a save if we have bricks
         if (data.bricks.length > 0) {
-          console.log(data.bricks[0], data.bricks.length)
           this.brikkit.writeSaveData('chunkloader', data);
           this.brikkit.loadBricks('chunkloader');
         }

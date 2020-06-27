@@ -25,6 +25,7 @@ const documentation = {
   }],
 };
 
+try{require('disrequire')('../cakeutils/util.voxelChunkLoader.js');}catch(e){console.log(e)}
 const ChunkloaderProvider = require('../cakeutils/util.voxelChunkLoader.js');
 
 const noise = require('./lib.noise.js');
@@ -54,8 +55,8 @@ module.exports = brikkit => {
   const chunkloader = newChunkLoader({
     blockSize: 40,
     chunkSize: 8,
-    viewDistance: 2,
-    renderRate: 1000,
+    viewDistance: 4,
+    renderRate: 2000,
     is3d,
   })
 
@@ -99,20 +100,41 @@ module.exports = brikkit => {
       )
     };
 
-    return (noises.steps || noises.spaghetti || noises.spaghetti2)
+    return noises;
   }
 
   // render block if it should exist, set block color
-  const blockFrom3dPos = ({x, y, z, offset: {x: ox, y: oy, z: oz}}) =>
-    terrainFrom3dPos(x + ox, y + oy, z + oz) && ({
+  const blockFrom3dPos = ({x, y, z, chunk, offset: {x: ox, y: oy, z: oz}}) => {
+    const noises = terrainFrom3dPos(x + ox, y + oy, z + oz);
+
+    if (chunk.z > 20 || Math.hypot(chunk.x, chunk.y) > 5)
+      return;
+
+    const stepColor = [
+      Math.floor(colorHelper(ox, oy, oz, 0, 0, 0) * 0.2),
+      Math.floor(colorHelper(ox, oy, oz, 300, 2000, 500)),
+      Math.floor(colorHelper(ox, oy, oz, 1000, -9000, 2300) * 0.2),
+      255,
+    ];
+
+    const spaghettiColor = [
+      Math.floor(colorHelper(ox, oy, oz, 0, 0, 0) * 0.1 + 80),
+      Math.floor(colorHelper(ox, oy, oz, 300, 2000, 500) * 0.1 + 40),
+      Math.floor(colorHelper(ox, oy, oz, 1000, -9000, 2300) * 0.1 + 20),
+      255,
+    ];
+
+    return (noises.steps || noises.spaghetti || noises.spaghetti2) && ({
       x, y, z,
-      color: [
-        colorHelper(ox, oy, oz, 0, 0, 0),
-        colorHelper(ox, oy, oz, 300, 2000, 500),
-        colorHelper(ox, oy, oz, 1000, -9000, 2300),
-        255,
-      ],
+      color: noises.steps ? stepColor : spaghettiColor,
     });
+  }
+
+/*  chunkloader.decorateChunk = ({x, y, z}, blocks) => {
+    if (z !== 20 || Math.hypot(x, y) > 5)
+      return;
+    // TODO generate spawns
+  };*/
 
   // tell chunkloader to use 2d or 3d generator
   chunkloader.blockFromPos = is3d ? blockFrom3dPos : blockFrom2dPos;
