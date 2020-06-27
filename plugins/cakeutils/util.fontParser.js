@@ -25,10 +25,13 @@ module.exports = file => {
       (a.position[axis] - b.position[axis])*delta
     )
     // get the bricks above the plate
-    .map(c => ({
-      bricks: moveBricks(parser.aboveBrick(c), c.position.map(v => -v)),
-      width: c.size[axis] * 2,
-    }));
+    .map(c => {
+      const size = c.rotation === 1 || c.rotation == 3 ? [c.size[1], c.size[0], c.size[2]] : c.size;
+      return {
+        bricks: moveBricks(parser.aboveBrick(c), c.position.map(v => -v)),
+        width: size[axis] * 2,
+      };
+    });
 
   return {
     // generate brick text from string

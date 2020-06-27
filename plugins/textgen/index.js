@@ -41,7 +41,7 @@ const { linearRGB } = require('../cakeutils/util.color.js');
 
 // load in saves in font_fontname.brs format
 const fonts = Object.fromEntries(fs.readdirSync(__dirname)
-  .map(f => f.match(/font_([a-z]+)\.brs/))
+  .map(f => f.match(/font_([a-z_]+)\.brs/))
   .filter(f => f)
   .map(match => [match[1], fontParser(__dirname + '/' + match[0])]));
 
