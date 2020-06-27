@@ -409,7 +409,7 @@ module.exports = brikkit => {
         const game = findGame(x, y, true);
 
         if (!game) {
-          brikkit.say(`"<b>${sanitize(name)}</> not over an active game"`)
+          brikkit.say(`"<b>${sanitize(name)}</> not over a game"`)
           return;
         }
 
