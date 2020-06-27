@@ -11,18 +11,22 @@ const documentation = {
   commands: [{
     name: '!ms:start',
     description: 'Start a game of minesweeper',
-    example: '!ms:start width:30 height:16 mines:130 quiet',
+    example: '!ms:start width:30 height:16 mines:130',
     args: [
       {name: 'size:#', description: 'sets width and height of game (default: 10)', required: false},
       {name: 'width:#', description: 'sets width of game (default: 10)', required: false},
       {name: 'height:#', description: 'sets height of game (default: 10)', required: false},
       {name: 'mines:#', description: 'sets height of game (default: 15% of size)', required: false},
-      {name: 'quiet', description: 'start an unscripted game (hammer to play)', required: false},
     ]
   }, {
     name: '!ms:mine',
     description: 'Mine a tile in tile below the player in an active game',
     example: '!ms:mine',
+    args: [],
+  }, {
+    name: '!ms:stats',
+    description: 'Get stats for the game below the player',
+    example: '!ms:stats',
     args: [],
   }, {
     name: '!ms:clearall',
@@ -52,7 +56,6 @@ const MINESIZE = 8; // 4 is also an option for uglier and smaller grid
 const MINESAVE = __dirname + '/tileset.brs';
 
 const defaultTileset = new ParseTool(brs.read(fs.readFileSync(MINESAVE)));
-const staticTileset = new ParseTool(brs.read(fs.readFileSync(__dirname + '/statictileset.brs')));
 
 // queries for tileset
 const TILESET_QUERIES = {
@@ -108,7 +111,6 @@ const getTileSaveProvider = parser => {
 }
 
 const getTileSave = getTileSaveProvider(defaultTileset);
-const getTileSaveStatic = getTileSaveProvider(staticTileset);
 
 // populate a minesweeper board with mines, provide some helper funcs
 const genMinesweeperBoard = (width, height, mines, banned=[]) => {
@@ -159,11 +161,11 @@ module.exports = brikkit => {
 
   const getPlayerPos = PlayerPosProvider(brikkit, deregister);
   const cooldown = CooldownProvider(1000);
-  const startCooldown = CooldownProvider(10000);
+  const startCooldown = CooldownProvider(5000);
 
   // helper for finding the game a player is over
-  const findGame = (x, y) => global.minesweepers.find(game =>
-    x >= game.left && y >= game.top && y < game.bottom && x < game.right && game.inProgress);
+  const findGame = (x, y, ignore) => global.minesweepers.find(game =>
+    x >= game.left && y >= game.top && y < game.bottom && x < game.right && (ignore || game.inProgress));
 
   // determine if a user trusts another player
   const hasTrust = (owner, user) =>
@@ -185,14 +187,9 @@ module.exports = brikkit => {
       let width = 10;
       let height = 10;
       let mines = 0;
-      let static = false;
 
       // parse key:val from args
       for (const arg of args) {
-        if (arg === 'quiet') {
-          static = true;
-          continue;
-        }
         if (arg.split(':').length !== 2) continue;
         let [key, val] = arg.split(':');
 
@@ -251,6 +248,19 @@ module.exports = brikkit => {
           inProgress: true,
           x, y,
           left, top, bottom, right,
+          stats: {},
+        };
+
+        game.progress = () => {
+          // count revealed cells
+          let revealed = 0;
+          for (let i = 0; i < game.width; i++)
+            for (let j = 0; j < game.height; j++)
+              if (game.generated[i][j])
+                revealed ++;
+
+          // compare to total number of possible cells
+          return Math.min(revealed / (game.width * game.height - game.mines), 1);
         };
 
         game.generated = Array.from({length: width})
@@ -265,55 +275,6 @@ module.exports = brikkit => {
         global.minesweepers.push(game);
       };
 
-      // generate a board, let players hammer the bricks
-      const startStaticGame = (x, y) => {
-        const left = x;
-        const top = y;
-        const bottom = (y + height);
-        const right = (x + width);
-        brikkit.say(`"<b>${sanitize(name)}</> starting (quiet) at (${left},${top}) (${width}x${height} ${mines} mines = ${Math.round(mines/(width*height)*100)}%)"`)
-
-        if (global.minesweepers.find(m =>
-          !(left > m.right ||
-           right < m.left ||
-           top > m.bottom ||
-           bottom < m.top)
-        )) {
-          brikkit.say(`"<b>${sanitize(name)}</> can't start a game here (overlap)"`)
-          return;
-        }
-
-        const game = {
-          width,
-          height,
-          mines,
-          name,
-          inProgress: false,
-          x, y,
-          left, top, bottom, right,
-        };
-        global.minesweepers.push(game);
-
-        // set brick owner
-        const author = {
-          id: brikkit.getPlayerFromUsername(name).getUserId(),
-          name,
-        };
-
-        const grid = [];
-        const board = genMinesweeperBoard(width, height, mines);
-        for (let i = 0; i < width; i++)
-          for (let j = 0; j < height; j++) {
-            grid.push({tile: 'tile', pos: [i + x, j + y, -1], owned: true});
-            if (board.isMine(i, j))
-              grid.push({tile: 'mine', pos: [i + x, j + y, -1]});
-            else
-              grid.push({tile: board.count(i, j), pos: [i + x, j + y, -1]});
-          }
-        brikkit.writeSaveData('mine_' + name, getTileSaveStatic(grid, author));
-        brikkit.loadBricks('mine_' + name);
-      }
-
       // get player position and start game at that spot
       getPlayerPos(name)
         .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`))
@@ -321,10 +282,7 @@ module.exports = brikkit => {
           x = Math.round(x/MINESIZE/10);
           y = Math.round(y/MINESIZE/10);
 
-          if(static && MINESIZE === 8)
-            startStaticGame(x, y);
-          else
-            startGame(x, y);
+          startGame(x, y);
         });
     }
 
@@ -366,11 +324,13 @@ module.exports = brikkit => {
           // end the game, add a frown
           game.inProgress = false;
           grid.push({tile: 'frown', pos: [-1, -1, 0]});
-          brikkit.say(`"<color=\\"ff9999\\"><b>${sanitize(name)}</> lost a game${
+          game.lastMove = name;
+          brikkit.say(`"<color=\\"ff9999\\"><b>${sanitize(name)}</> lost a game at <b>${Math.round(game.progress()*100)}% complete</>${
             name !== game.name ? ` on <b>${sanitize(game.name)}</>'s behalf` : ' '
           }...</> (${game.width}x${game.height} ${game.mines} mines = ${Math.round(game.mines/(game.width*game.height)*100)}%)"`);
         } else {
           const count = game.board.count(cx, cy);
+          game.stats[name] = (game.stats[name] || 0) + 1;
           // render the count if there's more than 0
           if (count > 0) {
             grid.push({tile: 0, pos: [cx, cy, 0]});
@@ -416,16 +376,9 @@ module.exports = brikkit => {
           if(x >= 0 && y >= 0) game.generated[x][y] = 1
         });
 
-        // count revealed cells
-        let revealed = 0;
-        for (let i = 0; i < game.width; i++)
-          for (let j = 0; j < game.height; j++)
-            if (game.generated[i][j])
-              revealed ++;
-
         // only win if the game is in progress and all the non-bomb cells have been reveal
         let win = false;
-        if (game.inProgress && revealed === game.width * game.height - game.mines) {
+        if (game.inProgress && game.progress() === 1) {
           game.inProgress = false;
           win = true;
           // render sunglasses
@@ -439,8 +392,10 @@ module.exports = brikkit => {
         brikkit.loadBricks('mine_' + name);
 
         // announce win
-        if (win)
+        if (win) {
+          game.lastMove = name;
           brikkit.say(`"<color=\\"99ff99\\"><b>${sanitize(name)}</> finished a game!</> (${game.width}x${game.height} ${game.mines} mines = ${Math.round(game.mines/(game.width*game.height)*100)}%)"`)
+        }
       }
 
       getPlayerPos(name)
@@ -448,9 +403,41 @@ module.exports = brikkit => {
         .then(({x, y, z}) => mine(Math.round(x/MINESIZE/10), Math.round(y/MINESIZE/10)));
     }
 
+    // get board stats for current location
+    if (command === '!ms:stats' && cooldown(name)) {
+      const stats = (x, y) => {
+        const game = findGame(x, y, true);
+
+        if (!game) {
+          brikkit.say(`"<b>${sanitize(name)}</> not over an active game"`)
+          return;
+        }
+
+        brikkit.say(`"[${
+          game.inProgress
+            ? `<color=\\"cccccc\\">${Math.round(game.progress()*100)}%</>`
+            : game.progress() !== 1 ? `<color=\\"ff9999\\">lost @ ${Math.round(game.progress()*100)}%</>` : '<color=\\"99ff99\\">won</>'
+        }] <b>${sanitize(game.name)}</> (${game.width}x${game.height} ${game.mines} mines = ${Math.round(game.mines/(game.width*game.height)*100)}%)"`);
+        if (game.stats && Object.keys(game.stats).length) {
+          for (const key in game.stats) {
+            brikkit.say(`" -- <b>${sanitize(key)}</>: ${game.stats[key]} moves ${game.lastMove && game.lastMove === key ? '(final move)' : ''}"`);
+          }
+          if (game.lastMove && !game.stats[game.lastMove])
+            brikkit.say(`"<b>${sanitize(game.lastMove)}</>'s only move was losing the game"`);
+        }
+      };
+
+      getPlayerPos(name)
+        .catch(() => brikkit.say(`"Could not find ${sanitize(name)}"`))
+        .then(({x, y, z}) => stats(Math.round(x/MINESIZE/10), Math.round(y/MINESIZE/10)));
+    }
+
     // trust a player
     if (command === '!ms:trust' && cooldown(name) && args.length > 0) {
       const target = args.join(' ');
+      if (target === name)
+        return;
+
       if (!brikkit.getPlayerFromUsername(args.join(' '))) {
         brikkit.say(`"Could not find <b>${sanitize(target)}</>"`)
         return;
