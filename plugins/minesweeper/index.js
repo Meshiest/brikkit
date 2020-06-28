@@ -372,9 +372,10 @@ module.exports = brikkit => {
 
         // remove ones that were already generated
         grid = grid.filter(({pos: [x, y, z]}) => x < 0 || y < 0 || !game.generated[x][y])
-        grid.forEach(({pos: [x, y, z]}) => {
-          if(x >= 0 && y >= 0) game.generated[x][y] = 1
-        });
+        if (game.inProgress)
+          grid.forEach(({pos: [x, y, z]}) => {
+            if(x >= 0 && y >= 0) game.generated[x][y] = 1
+          });
 
         // only win if the game is in progress and all the non-bomb cells have been reveal
         let win = false;
@@ -394,7 +395,9 @@ module.exports = brikkit => {
         // announce win
         if (win) {
           game.lastMove = name;
-          brikkit.say(`"<color=\\"99ff99\\"><b>${sanitize(name)}</> finished a game!</> (${game.width}x${game.height} ${game.mines} mines = ${Math.round(game.mines/(game.width*game.height)*100)}%)"`)
+          brikkit.say(`"<color=\\"99ff99\\"><b>${sanitize(name)}</> finished a game${
+            name !== game.name ? ` on <b>${sanitize(game.name)}</>'s behalf` : ''
+          }!</> (${game.width}x${game.height} ${game.mines} mines = ${Math.round(game.mines/(game.width*game.height)*100)}%)"`)
         }
       }
 
